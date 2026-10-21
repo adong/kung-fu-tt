@@ -277,6 +277,24 @@
     #wiggle { bottom: auto; top: 34%; }
   }
 
+  /* a narrow (portrait phone) screen: the floor / score row goes on its own line, the companion card is just his face */
+  @media (max-width: 600px) {
+    :root {
+      --kh-top: calc(max(10px, env(safe-area-inset-top)) + 140px);
+      --kl-top: calc(max(10px, env(safe-area-inset-top)) + 188px);
+      --ks-top: calc(max(10px, env(safe-area-inset-top)) + 236px);
+    }
+    .top { flex-wrap: wrap; row-gap: 8px; }
+    .mid { order: 3; flex-basis: 100%; flex-direction: row; justify-content: center; flex-wrap: wrap; gap: 8px; }
+    .pcard { max-width: none; }
+    .budcard { padding: 4px; border-radius: 18px; }
+    .budcard .btxt { display: none; }
+    .budcard .bface { width: 60px; height: 60px; border-radius: 14px; }
+    .team { top: calc(max(10px, env(safe-area-inset-top)) + 128px); }
+    body.touch #bossbar, body.touch.two #bossbar { top: calc(max(10px, env(safe-area-inset-top)) + 128px); width: min(330px, 70vw); }
+    body.touch.two #bossbar { top: calc(max(10px, env(safe-area-inset-top)) + 186px); }
+  }
+
   /* ---------- screens ---------- */
   .screen {
     position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;

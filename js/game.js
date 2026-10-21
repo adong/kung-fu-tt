@@ -473,6 +473,9 @@
   }
 
   const lag = [1, 1], bossLag = { v: 1 };
+  // write text only when it changes, so the page translator (Kit.lang) isn't undone every frame
+  const textCache = new Map();
+  function setText(el, text) { if (textCache.get(el) !== text) { textCache.set(el, text); el.textContent = text; } }
   let lastTimeShown = -1, readyWas = [true, true];
   function updateHud(dt) {
     if (!W) return;
@@ -499,15 +502,15 @@
       readyWas[i] = k >= 1;
       pc.querySelector('.power').classList.toggle('on', P.power > 0);
     });
-    $('floorTxt').textContent = `FLOOR ${W.fi + 1}`;
+    setText($('floorTxt'), `FLOOR ${W.fi + 1}`);
     $('dots').querySelectorAll('i').forEach((el, i) => { el.className = i < W.fi ? 'done' : i === W.fi ? 'now' : ''; });
-    $('livesTxt').textContent = `❤️${W.lives}`;
-    $('scoreTxt').textContent = String(W.score);
+    setText($('livesTxt'), `❤️${W.lives}`);
+    setText($('scoreTxt'), String(W.score));
     const timeEl = $('timeTxt');
     timeEl.classList.toggle('hidden', !W.D.timer);
     if (W.D.timer) {
       const s = Math.ceil(W.time);
-      if (s !== lastTimeShown) { timeEl.textContent = `⏱${s}`; if (s <= 10 && s > 0 && W.phase === 'play' && screen === 'play') Sfx.tick(); lastTimeShown = s; }
+      if (s !== lastTimeShown) { setText(timeEl, `⏱${s}`); if (s <= 10 && s > 0 && W.phase === 'play' && screen === 'play') Sfx.tick(); lastTimeShown = s; }
       timeEl.classList.toggle('warn', s <= 20);
     }
     // the companion card (1 player) or the high five (2 players)
@@ -532,7 +535,7 @@
     const go = $('go');
     go.classList.toggle('hidden', !showGo);
     go.className = `${showGo ? '' : 'hidden'} ${W.dir < 0 ? 'toL' : 'toR'}`;
-    go.textContent = W.dir < 0 ? '⬅ GO' : 'GO ➡';
+    setText(go, W.dir < 0 ? '⬅ GO' : 'GO ➡');
     // a hug: wiggle!
     const g = W.players.find((p) => p.state === 'grabbed');
     $('wiggle').classList.toggle('hidden', !g || screen !== 'play');

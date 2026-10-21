@@ -11,7 +11,7 @@ Kit.help.setup({
     ['kick (in the air: flying kick)', 'G', 'L'],
     ['low punch · low kick', 'hold S + F · G', 'hold ↓ + K · L'],
     ['special', 'H', 'J'],
-    ['wiggle free from a hug', 'any key, fast', 'any key, fast'],
+    ['wiggle free from a hug (press fast)', 'F G H', 'K L J'],
     ['call your brother · high five', 'T', 'Enter'],
     ['pause · sound', 'P or Esc · M', ''],
   ],
