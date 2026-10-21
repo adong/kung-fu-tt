@@ -1039,7 +1039,15 @@
       spawnBoss(W);
     }
     const lo = W.arena ? arenaLo(W) - 0.05 : Math.max(0.3, W.cam - W.halfW + 0.45);
-    const hi = W.arena ? W.L - 0.6 : W.cam + W.halfW - 0.45;
+    let hi = W.arena ? W.L - 0.6 : W.cam + W.halfW - 0.45;
+    // the boss walks in by the stairs: nobody slips past him
+    if (W.boss && W.boss.state === 'enter') hi = Math.min(hi, W.L - 3.2 - W.boss.w - 0.35);
+    // two brothers on the ground don't stand inside each other
+    if (W.players.length === 2) {
+      const [a, c] = W.players;
+      const gap = 0.55 - Math.abs(a.u - c.u);
+      if (gap > 0 && !a.ko && !c.ko && a.y < 0.1 && c.y < 0.1) { const s = a.u <= c.u ? -1 : 1; a.u += s * gap / 2; c.u -= s * gap / 2; }
+    }
     for (const p of W.players) p.u = clamp(p.u, lo, Math.max(lo, hi));
     // nobody walks through a boss standing on the floor
     const b = W.boss;

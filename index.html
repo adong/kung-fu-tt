@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#c2362b">
+<title>Kung Fu TT · Teddy &amp; Tommy</title>
+<!-- The game's icon: the same emoji as its card on the dashboard, on a coloured tile. It's the browser tab's icon (the SVG, then
+     a PNG drawn below) and the iPad home screen's (apple-touch-icon). The device's own emoji font draws it: no image files. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20x='2'%20y='2'%20width='60'%20height='60'%20rx='14'%20fill='%23ff4b3a'%20stroke='%2314121f'%20stroke-width='4'/%3E%3Ctext%20x='32'%20y='44'%20font-size='36'%20text-anchor='middle'%3E%F0%9F%A5%8B%3C/text%3E%3C/svg%3E">
+<script>
+  (function (emoji, tile) {
+    function draw(size, framed) {
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      const g = c.getContext('2d');
+      if (!g) return '';
+      const u = size / 64;
+      g.fillStyle = tile;
+      if (framed) { // the tab: a rounded tile with the dashboard's dark outline
+        g.beginPath();
+        if (g.roundRect) g.roundRect(2 * u, 2 * u, 60 * u, 60 * u, 14 * u); else g.rect(2 * u, 2 * u, 60 * u, 60 * u);
+        g.fill();
+        g.lineWidth = 4 * u;
+        g.strokeStyle = '#14121f';
+        g.stroke();
+      } else g.fillRect(0, 0, size, size); // the home screen: iOS rounds the corners itself
+      g.font = `${Math.round(size * (framed ? 0.56 : 0.62))}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+      g.textAlign = 'center';
+      const m = g.measureText(emoji);
+      const up = m.actualBoundingBoxAscent || size * 0.4, down = m.actualBoundingBoxDescent || 0;
+      g.fillText(emoji, size / 2, size / 2 + (up - down) / 2);
+      try { return c.toDataURL('image/png'); } catch (e) { return ''; }
+    }
+    const tab = draw(64, true), home = draw(180, false);
+    if (tab) document.querySelector('link[rel="icon"]').href = tab;
+    if (home) {
+      const l = document.createElement('link');
+      l.rel = 'apple-touch-icon';
+      l.href = home;
+      document.head.appendChild(l);
+    }
+  })('🥋', '#ff4b3a');
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --yellow: #ffd400;
+    --pink: #ff3d7f;
+    --cyan: #18d4ff;
+    --blue: #3d8bff;
+    --orange: #ff9f1c;
+    --red: #e8303a;
+    --green: #3fc22b;
+    --ink: #14121f;
+    --display: 'Bungee', 'Arial Black', Impact, sans-serif;
+    /* the kit's round ? / A文 / speaker buttons sit on the left edge under the player card, well above the d-pad */
+    --kh-top: calc(max(10px, env(safe-area-inset-top)) + 96px);
+    --kl-top: calc(max(10px, env(safe-area-inset-top)) + 144px);
+    --ks-top: calc(max(10px, env(safe-area-inset-top)) + 192px);
+  }
+  @media (max-height: 520px) {
+    :root { --kh-top: calc(max(8px, env(safe-area-inset-top)) + 70px); --kl-top: calc(max(8px, env(safe-area-inset-top)) + 116px); --ks-top: calc(max(8px, env(safe-area-inset-top)) + 162px); }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #c2362b; color: #fff;
+    font-family: 'Rubik', system-ui, -apple-system, sans-serif;
+    touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 62%, rgba(40, 8, 10, 0.32) 100%); }
+  #fade { position: fixed; inset: 0; background: #14121f; opacity: 0; pointer-events: none; transition: opacity 0.45s; }
+  #fade.on { opacity: 1; }
+  .hidden { display: none !important; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .calm *, .calm *::before, .calm *::after { animation: none !important; transition: none !important; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; }
+  .top {
+    position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: flex-start; gap: 10px;
+    padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
+  }
+  .pcard { flex: 1; max-width: 360px; display: flex; gap: 9px; align-items: flex-start; min-width: 0; }
+  .pcard.right { flex-direction: row-reverse; margin-left: auto; }
+  .face {
+    flex: none; width: 64px; height: 64px; border-radius: 16px; overflow: hidden; border: 3px solid #fff;
+    background: radial-gradient(circle at 50% 35%, #a5dcff, #2a7bd6); box-shadow: 0 4px 0 var(--ink); position: relative;
+  }
+  .pcard.tommy .face { background: radial-gradient(circle at 50% 35%, #ffe2a0, #ff9f1c); }
+  .face img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.12) translateY(3%); }
+  .pcard.right .face img { transform: scale(-1.12, 1.12) translateY(3%); }
+  .face.hurt { animation: hurt 0.3s linear; }
+  @keyframes hurt { 25% { translate: -3px 0; filter: brightness(1.8) saturate(0.4); } 75% { translate: 3px 0; } }
+  .pcard.ko .face { filter: grayscale(0.8) brightness(0.8); }
+  .col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .row { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .right .row { flex-direction: row-reverse; }
+  .nm { font-family: var(--display); font-size: 19px; line-height: 1; -webkit-text-stroke: 1.5px var(--ink); paint-order: stroke fill; text-shadow: 0 2px 0 var(--ink); }
+  .who { font: 800 10px/1 'Rubik', sans-serif; letter-spacing: 1px; padding: 3px 6px; border-radius: 999px; background: var(--blue); border: 2px solid #fff; }
+  .tommy .who { background: var(--orange); }
+  .hp { position: relative; height: 22px; border-radius: 8px; background: rgba(20, 18, 31, 0.7); border: 3px solid #fff; overflow: hidden; box-shadow: 0 3px 0 var(--ink); }
+  .hp b { position: absolute; top: 0; bottom: 0; left: 0; width: 100%; transform-origin: left; }
+  .right .hp b { transform-origin: right; }
+  .hp .lag { background: #fff; opacity: 0.8; }
+  .hp .fill { background: linear-gradient(180deg, #9dff6a, #3fc22b); }
+  .hp.low .fill { background: linear-gradient(180deg, #ffd86a, #ff8a1f); }
+  .hp.crit .fill { background: linear-gradient(180deg, #ff9a8a, #ff3d3d); animation: blink 0.5s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0.55; } }
+  /* the special, with its cool-down filling up round it */
+  .spec {
+    --cd: 1; position: relative; flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-size: 18px;
+    background: conic-gradient(var(--yellow) calc(var(--cd) * 360deg), rgba(20, 18, 31, 0.6) 0); border: 2px solid #fff; box-shadow: 0 2px 0 var(--ink);
+  }
+  .spec span { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: rgba(20, 18, 31, 0.75); }
+  .spec.ready { animation: pulse 0.9s ease-in-out infinite; }
+  .spec.ready span { background: #8d3df0; }
+  .power { display: none; font: 800 11px/1 'Rubik', sans-serif; padding: 3px 7px; border-radius: 999px; background: var(--yellow); color: var(--ink); border: 2px solid #fff; animation: pulse 0.6s ease-in-out infinite; }
+  .power.on { display: inline-block; }
+
+  .mid { flex: none; display: flex; flex-direction: column; align-items: center; gap: 5px; margin: 0 auto; }
+  .floorchip { font-family: var(--display); font-size: 13px; padding: 5px 12px; border-radius: 999px; background: rgba(20, 18, 31, 0.62); border: 2px solid rgba(255, 255, 255, 0.8); white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+  .dots { display: flex; gap: 4px; }
+  .dots i { width: 10px; height: 10px; border-radius: 3px; background: rgba(255, 255, 255, 0.3); border: 1.5px solid #fff; }
+  .dots i.done { background: var(--green); }
+  .dots i.now { background: var(--yellow); animation: pulse 0.9s ease-in-out infinite; }
+  .stats { display: flex; gap: 10px; align-items: center; font-family: var(--display); font-size: 15px; -webkit-text-stroke: 1px var(--ink); paint-order: stroke fill; text-shadow: 0 2px 0 var(--ink); }
+  .stats .score { color: var(--yellow); font-variant-numeric: tabular-nums; }
+  .stats .time.warn { color: #ff8a8a; animation: pulse 0.5s ease-in-out infinite; }
+  .ibtns { display: flex; gap: 6px; pointer-events: auto; }
+  .ibtn { width: 38px; height: 38px; border-radius: 10px; font-size: 15px; line-height: 1; background: rgba(20, 18, 31, 0.5); border: 2px solid rgba(255, 255, 255, 0.75); display: grid; place-items: center; }
+
+  /* the companion: a big face to tap (1 player) */
+  .budcard {
+    pointer-events: auto; flex: none; display: flex; flex-direction: row-reverse; align-items: center; gap: 8px; margin-left: auto;
+    padding: 5px 5px 5px 12px; border-radius: 22px; background: rgba(20, 18, 31, 0.55); border: 3px solid #fff; box-shadow: 0 4px 0 var(--ink);
+  }
+  .budcard .bface { position: relative; width: 74px; height: 74px; border-radius: 18px; overflow: hidden; border: 3px solid #fff; background: radial-gradient(circle at 50% 35%, #ffe2a0, #ff9f1c); flex: none; }
+  .budcard.teddy .bface { background: radial-gradient(circle at 50% 35%, #a5dcff, #2a7bd6); }
+  .budcard .bface img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.12) translateY(3%); }
+  .budcard .btxt { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; min-width: 96px; }
+  .budcard .bl1 { font: 800 10px/1 'Rubik', sans-serif; letter-spacing: 1px; opacity: 0.9; }
+  .budcard .bl2 { font-family: var(--display); font-size: 17px; line-height: 1; -webkit-text-stroke: 1.2px var(--ink); paint-order: stroke fill; }
+  .budcard kbd { margin: 0; }
+  .budcard.here { border-color: var(--yellow); box-shadow: 0 4px 0 var(--ink), 0 0 22px rgba(255, 212, 0, 0.9); }
+  .budcard.pop { animation: pop 0.25s ease-out; }
+  @keyframes pop { 40% { transform: scale(1.12); } }
+  .budcard:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+
+  /* the high five (2 players) */
+  .team {
+    pointer-events: auto; position: absolute; left: 50%; translate: -50% 0; top: calc(max(10px, env(safe-area-inset-top)) + 108px);
+    display: flex; align-items: center; gap: 8px; padding: 6px 14px 6px 6px; border-radius: 999px;
+    background: rgba(20, 18, 31, 0.6); border: 3px solid #fff; box-shadow: 0 4px 0 var(--ink); --fill: 1;
+  }
+  .team .tf { display: flex; }
+  .team .tf img { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #fff; background: radial-gradient(circle at 50% 35%, #a5dcff, #2a7bd6); object-fit: cover; }
+  .team .tf img + img { margin-left: -12px; background: radial-gradient(circle at 50% 35%, #ffe2a0, #ff9f1c); }
+  .team .tt { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+  .team b { font-family: var(--display); font-weight: 400; font-size: 15px; line-height: 1; -webkit-text-stroke: 1.2px var(--ink); paint-order: stroke fill; }
+  .team .bar { position: relative; width: 104px; height: 9px; border-radius: 5px; background: rgba(255, 255, 255, 0.25); border: 2px solid rgba(255, 255, 255, 0.8); overflow: hidden; }
+  .team .bar::after { content: ''; position: absolute; inset: 0; transform-origin: left; transform: scaleX(var(--fill)); background: linear-gradient(90deg, var(--yellow), var(--orange)); }
+  .team.ready { border-color: var(--yellow); box-shadow: 0 4px 0 var(--ink), 0 0 24px rgba(255, 212, 0, 0.95); animation: pulse 0.9s ease-in-out infinite; }
+
+  #bossbar {
+    position: absolute; left: 50%; translate: -50% 0; bottom: max(14px, env(safe-area-inset-bottom)); width: min(540px, 70vw);
+    display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 6px; border-radius: 18px; background: rgba(20, 18, 31, 0.62); border: 3px solid #fff;
+  }
+  #bossbar .be { width: 48px; height: 48px; border-radius: 12px; border: 2px solid #fff; background: radial-gradient(circle at 50% 35%, #ffd0a0, #c2362b); display: grid; place-items: center; font-size: 28px; flex: none; }
+  #bossbar .nm { font-size: 16px; color: #ffe0b0; }
+  #bossbar .hp { height: 18px; }
+  #bossbar .hp .fill { background: linear-gradient(180deg, #ff9a6a, #d8302a); }
+  body.touch #bossbar { bottom: auto; top: calc(max(10px, env(safe-area-inset-top)) + 108px); width: min(420px, 50vw); }
+  body.touch.two #bossbar { top: calc(max(10px, env(safe-area-inset-top)) + 160px); }
+
+  #go {
+    position: absolute; top: 44%; font-family: var(--display); font-size: clamp(34px, 6vw, 64px);
+    color: var(--yellow); -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill; text-shadow: 0 5px 0 var(--ink);
+    animation: go 0.7s ease-in-out infinite;
+  }
+  #go.toR { right: max(26px, env(safe-area-inset-right)); }
+  #go.toL { left: max(64px, env(safe-area-inset-left)); animation-name: goL; }
+  @keyframes go { 50% { translate: 16px 0; } }
+  @keyframes goL { 50% { translate: -16px 0; } }
+  .banner {
+    position: absolute; left: 0; right: 0; top: 28%; text-align: center; font-family: var(--display); opacity: 0;
+    font-size: clamp(36px, 8vw, 96px); line-height: 1; color: var(--yellow); padding: 0 12px;
+    -webkit-text-stroke: 4px var(--ink); paint-order: stroke fill;
+    text-shadow: 0 7px 0 var(--red), 0 12px 0 var(--ink), 0 20px 30px rgba(0, 0, 0, 0.35);
+  }
+  .banner.show { opacity: 1; animation: slam 0.45s cubic-bezier(.2, 1.6, .4, 1); }
+  .banner.small { font-size: clamp(28px, 5.5vw, 64px); color: #fff; text-shadow: 0 6px 0 var(--blue), 0 11px 0 var(--ink); }
+  .banner.boss { color: #ffe0b0; text-shadow: 0 6px 0 #8a1f1a, 0 11px 0 var(--ink); }
+  .banner.clear { color: var(--cyan); text-shadow: 0 7px 0 var(--yellow), 0 12px 0 var(--ink); }
+  .bsub { position: absolute; left: 0; right: 0; top: calc(28% + clamp(48px, 9vw, 110px)); text-align: center; font-size: clamp(15px, 2.3vw, 22px); font-weight: 800; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.85); opacity: 0; padding: 0 20px; }
+  .bsub.show { opacity: 1; }
+  @keyframes slam { from { transform: scale(2.4) rotate(-8deg); opacity: 0; } }
+  @keyframes pulse { 50% { transform: scale(1.07); } }
+  #toasts { position: absolute; left: 0; right: 0; top: 21%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .toast {
+    font-family: var(--display); font-size: clamp(17px, 2.8vw, 26px); padding: 8px 18px; border-radius: 999px; background: rgba(20, 18, 31, 0.72);
+    border: 3px solid var(--yellow); -webkit-text-stroke: 1px var(--ink); paint-order: stroke fill; white-space: nowrap; animation: toast 2.2s ease-out forwards;
+  }
+  .toast.save { border-color: var(--cyan); color: #bff2ff; }
+  .toast.food { border-color: #7dff5a; }
+  .toast.warn { border-color: #ff8a8a; color: #ffd0d0; }
+  @keyframes toast { 0% { opacity: 0; transform: scale(1.8); } 10% { opacity: 1; transform: scale(0.95); } 16% { transform: scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-16px); } }
+  #wiggle {
+    position: absolute; left: 50%; translate: -50% 0; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 84px);
+    display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 16px; border-radius: 18px;
+    background: rgba(255, 61, 127, 0.85); border: 3px solid #fff; box-shadow: 0 4px 0 var(--ink); animation: shake 0.25s linear infinite;
+  }
+  #wiggle b { font-family: var(--display); font-weight: 400; font-size: clamp(20px, 3.4vw, 30px); -webkit-text-stroke: 1.2px var(--ink); paint-order: stroke fill; }
+  #wiggle small { font-size: 13px; font-weight: 800; }
+  #wiggle .bar { width: 180px; height: 12px; border-radius: 6px; background: rgba(20, 18, 31, 0.5); border: 2px solid #fff; overflow: hidden; }
+  #wiggle .bar i { display: block; height: 100%; width: 0; background: var(--yellow); }
+  body.touch #wiggle { bottom: auto; top: 40%; }
+  @keyframes shake { 25% { rotate: -2deg; } 75% { rotate: 2deg; } }
+
+  /* ---------- touch controls ---------- */
+  #touch { position: fixed; inset: 0; pointer-events: none; }
+  .pad {
+    position: absolute; bottom: max(16px, env(safe-area-inset-bottom)); width: 168px; height: 168px; border-radius: 34px;
+    pointer-events: auto; touch-action: none;
+    background: rgba(20, 18, 31, 0.4); border: 4px solid rgba(255, 255, 255, 0.85);
+  }
+  .pad .ar {
+    position: absolute; width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; font-size: 22px;
+    background: rgba(255, 255, 255, 0.2); border: 2px solid rgba(255, 255, 255, 0.7); text-shadow: 0 2px 0 var(--ink); line-height: 1;
+  }
+  .pad .ar small { position: absolute; bottom: -1px; font: 800 9px/1 'Rubik', sans-serif; letter-spacing: 0.5px; text-shadow: none; opacity: 0.9; }
+  .pad .u { top: 4px; left: 50%; translate: -50% 0; } .pad .d { bottom: 4px; left: 50%; translate: -50% 0; }
+  .pad .l { left: 4px; top: 50%; translate: 0 -50%; } .pad .r { right: 4px; top: 50%; translate: 0 -50%; }
+  .pad[data-dir*="l"] .l, .pad[data-dir*="r"] .r, .pad[data-dir*="u"] .u, .pad[data-dir*="d"] .d { background: var(--yellow); color: var(--ink); border-color: #fff; }
+  .tbtns { position: absolute; bottom: max(16px, env(safe-area-inset-bottom)); display: grid; grid-template-columns: 84px 92px; grid-template-rows: 76px 92px; gap: 10px; pointer-events: auto; }
+  .tbtn {
+    position: relative; width: 100%; height: 100%; border-radius: 50%; font-size: 30px; line-height: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    border: 4px solid #fff; box-shadow: 0 6px 0 var(--ink); touch-action: none;
+  }
+  .tbtn small { font: 800 9px/1 'Rubik', sans-serif; letter-spacing: 1px; }
+  .tbtn.punch { grid-column: 2; grid-row: 2; font-size: 36px; background: linear-gradient(160deg, #ff8a5a, var(--red)); }
+  .tbtn.kick { grid-column: 1; grid-row: 2; background: linear-gradient(160deg, #7cd0ff, #2a7bd6); }
+  .tbtn.spc { grid-column: 2; grid-row: 1; background: conic-gradient(rgba(255, 255, 255, 0.0) calc(var(--cd, 1) * 360deg), rgba(20, 18, 31, 0.55) 0), linear-gradient(160deg, #d58cff, #8d3df0); }
+  .tbtn.spc.ready { box-shadow: 0 6px 0 var(--ink), 0 0 18px rgba(255, 212, 0, 0.9); }
+  .tbtn.down { transform: translateY(5px); box-shadow: 0 1px 0 var(--ink); filter: brightness(1.15); }
+  .c0 .pad { left: max(16px, env(safe-area-inset-left)); }
+  .c0 .tbtns { right: max(16px, env(safe-area-inset-right)); }
+  /* two players on one iPad: Teddy on the left, Tommy on the right */
+  #touch.two .c0 .tbtns { right: auto; left: calc(max(16px, env(safe-area-inset-left)) + 184px); }
+  #touch.two .c1 .pad { right: max(16px, env(safe-area-inset-right)); }
+  #touch.two .c1 .tbtns { right: calc(max(16px, env(safe-area-inset-right)) + 184px); grid-template-columns: 92px 84px; }
+  #touch.two .c1 .punch { grid-column: 1; } #touch.two .c1 .kick { grid-column: 2; } #touch.two .c1 .spc { grid-column: 1; }
+  #touch:not(.two) .c1 { display: none; }
+  @media (max-height: 520px) {
+    .pad { width: 138px; height: 138px; border-radius: 28px; }
+    .pad .ar { width: 46px; height: 46px; font-size: 18px; border-radius: 13px; }
+    .tbtns { grid-template-columns: 70px 78px; grid-template-rows: 62px 78px; gap: 8px; }
+    #touch.two .c1 .tbtns { grid-template-columns: 78px 70px; }
+    #touch.two .c0 .tbtns { left: calc(max(16px, env(safe-area-inset-left)) + 152px); }
+    #touch.two .c1 .tbtns { right: calc(max(16px, env(safe-area-inset-right)) + 152px); }
+    .tbtn { font-size: 24px; } .tbtn.punch { font-size: 30px; }
+    .face { width: 48px; height: 48px; border-radius: 12px; }
+    .nm { font-size: 15px; }
+    .hp { height: 16px; }
+    .spec { width: 28px; height: 28px; font-size: 14px; } .spec span { width: 21px; height: 21px; }
+    .budcard .bface { width: 56px; height: 56px; }
+    .budcard .btxt { min-width: 80px; }
+    .team { top: calc(max(8px, env(safe-area-inset-top)) + 92px); }
+    .floorchip { font-size: 11px; padding: 4px 9px; }
+    .stats { font-size: 13px; }
+    .ibtn { width: 32px; height: 32px; }
+    #wiggle { bottom: auto; top: 34%; }
+  }
+
+  /* ---------- screens ---------- */
+  .screen {
+    position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+    gap: clamp(8px, 2vh, 16px); padding: 16px; text-align: center;
+    background: linear-gradient(180deg, rgba(40, 10, 10, 0.05), rgba(40, 10, 14, 0.6));
+    overflow-y: auto; justify-content: safe center;
+  }
+  .screen > * { flex-shrink: 0; }
+  .logo { transform: rotate(-4deg); line-height: 0.9; margin-bottom: 4px; }
+  .logo span { display: block; font-family: var(--display); -webkit-text-stroke: 4px var(--ink); paint-order: stroke fill; }
+  .logo .l1 { color: #fff; font-size: clamp(34px, min(8vw, 9vh), 84px); text-shadow: 0 5px 0 var(--red), 0 9px 0 var(--ink); }
+  .logo .l2 { color: var(--yellow); font-size: clamp(48px, min(13vw, 14vh), 140px); text-shadow: 0 6px 0 var(--red), 0 11px 0 var(--ink), 0 18px 30px rgba(0, 0, 0, 0.35); }
+  .logo .zh { color: var(--yellow); font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; font-weight: 900; font-size: clamp(54px, min(13vw, 15vh), 140px); letter-spacing: 6px; text-shadow: 0 6px 0 var(--red), 0 11px 0 var(--ink); }
+  .tag { font-size: clamp(15px, 2.3vw, 21px); font-weight: 800; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7); }
+  .btn {
+    font-family: var(--display); font-size: clamp(20px, 3.4vw, 28px); color: var(--ink);
+    background: var(--yellow); border: 4px solid var(--ink); border-radius: 20px; padding: 12px 28px;
+    box-shadow: 0 8px 0 var(--ink), 0 14px 30px rgba(0, 0, 0, 0.3); transition: transform 0.08s, box-shadow 0.08s;
+  }
+  .btn:hover { background: #ffe03d; }
+  .btn:active { transform: translateY(6px); box-shadow: 0 2px 0 var(--ink); }
+  .btn.alt { background: var(--cyan); }
+  .btn.ghost { background: #fff; }
+  .btn.small { font-size: clamp(15px, 2.4vw, 19px); padding: 9px 18px; border-radius: 16px; box-shadow: 0 6px 0 var(--ink); }
+  .btn small { display: block; font: 800 11px/1.2 'Rubik', sans-serif; letter-spacing: 0.5px; margin-top: 3px; }
+  .modes, .btnrow { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+  .pulse { animation: pulse 1.3s ease-in-out infinite; }
+  .levels { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .lvl {
+    display: flex; align-items: center; gap: 8px; padding: 7px 14px 7px 10px; border-radius: 14px; text-align: left;
+    background: rgba(20, 18, 31, 0.55); border: 3px solid rgba(255, 255, 255, 0.7); transition: transform 0.12s;
+  }
+  .lvl .e { font-size: 26px; }
+  .lvl b { display: block; font-family: var(--display); font-size: 16px; font-weight: 400; }
+  .lvl small { font-size: 11px; font-weight: 700; opacity: 0.88; }
+  .lvl[aria-checked="true"] { background: rgba(255, 212, 0, 0.3); border-color: var(--yellow); transform: scale(1.05); box-shadow: 0 0 0 3px var(--ink); }
+  .floors { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .floors .lbl { font-family: var(--display); font-size: 14px; text-shadow: 0 2px 0 var(--ink); }
+  .fl {
+    position: relative; width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; line-height: 1;
+    background: rgba(20, 18, 31, 0.55); border: 3px solid rgba(255, 255, 255, 0.7); font-family: var(--display); font-size: 20px;
+  }
+  .fl .e { position: absolute; top: -10px; right: -8px; font-size: 18px; }
+  .fl[aria-checked="true"] { background: rgba(255, 212, 0, 0.35); border-color: var(--yellow); transform: scale(1.08); box-shadow: 0 0 0 3px var(--ink); }
+  .fl.locked { opacity: 0.4; filter: grayscale(0.9); }
+  .best { font-family: var(--display); font-size: 14px; color: var(--yellow); text-shadow: 0 2px 0 var(--ink); }
+  .keys {
+    display: grid; grid-template-columns: auto auto auto; gap: 4px 14px; align-items: center; text-align: left;
+    padding: 10px 14px; border-radius: 16px; background: rgba(20, 18, 31, 0.6); border: 2px solid rgba(255, 255, 255, 0.6);
+    font-size: 13px; font-weight: 700;
+  }
+  .keys .h { font-family: var(--display); font-size: 13px; font-weight: 400; letter-spacing: 1px; }
+  .keys .h.p1 { color: #8cc2ff; } .keys .h.p2 { color: #ffc070; }
+  kbd {
+    display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px; margin: 1px;
+    font: 700 12px/1 system-ui, sans-serif; color: var(--ink); background: #fff; border-radius: 6px; box-shadow: 0 2px 0 #9aa;
+  }
+  .touch-hint { display: none; font-weight: 700; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); max-width: 560px; }
+  body.touch .keys { display: none; }
+  body.touch .touch-hint { display: block; }
+  body.touch .budcard kbd, body.touch .team kbd { display: none; }
+  .credit { position: fixed; right: max(14px, env(safe-area-inset-right)); bottom: max(10px, env(safe-area-inset-bottom)); font-size: 13px; font-weight: 700; opacity: 0.85; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); pointer-events: none; }
+  .credit b { color: #ffe2a0; }
+  .ttl { font-family: var(--display); font-size: clamp(26px, 5vw, 46px); color: var(--yellow); -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill; text-shadow: 0 5px 0 var(--ink); }
+  .hint { font-size: 13px; font-weight: 700; opacity: 0.92; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); }
+  .corner { position: fixed; top: max(10px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); }
+
+  .picks { display: flex; gap: clamp(14px, 4vw, 40px); }
+  .pick {
+    position: relative; width: clamp(150px, 26vw, 240px); padding: 12px 12px 14px; border-radius: 24px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+    background: linear-gradient(180deg, rgba(61, 139, 255, 0.6), rgba(20, 18, 31, 0.75)); border: 4px solid #8cc2ff; transition: transform 0.15s;
+  }
+  .pick.tommy { background: linear-gradient(180deg, rgba(255, 159, 28, 0.6), rgba(20, 18, 31, 0.75)); border-color: #ffc070; }
+  .pick img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 16px; }
+  .pick .nm { font-size: clamp(22px, 3.4vw, 32px); }
+  .pick .sp { font-size: 13px; font-weight: 800; }
+  .pick.sel { transform: scale(1.06); border-color: var(--yellow); box-shadow: 0 0 0 4px var(--ink), 0 0 30px rgba(255, 212, 0, 0.8); }
+
+  .big {
+    font-family: var(--display); font-size: clamp(42px, 8.5vw, 100px); color: var(--cyan); transform: rotate(-4deg); line-height: 1;
+    -webkit-text-stroke: 4px var(--ink); paint-order: stroke fill; text-shadow: 0 7px 0 var(--yellow), 0 12px 0 var(--ink);
+  }
+  .faces { display: flex; gap: 12px; align-items: flex-end; }
+  .faces img { width: clamp(84px, 15vh, 130px); aspect-ratio: 1; border-radius: 22px; border: 4px solid #fff; background: radial-gradient(circle at 50% 35%, #a5dcff, #2a7bd6); box-shadow: 0 6px 0 var(--ink); animation: pulse 1.2s ease-in-out infinite; }
+  .faces img.tommy { background: radial-gradient(circle at 50% 35%, #ffe2a0, #ff9f1c); animation-delay: 0.3s; }
+  .faces .panda { font-size: clamp(64px, 12vh, 104px); line-height: 1; animation: pulse 0.8s ease-in-out infinite; }
+  .statbox { padding: 12px 18px; border-radius: 16px; background: rgba(20, 18, 31, 0.65); border: 2px solid rgba(255, 255, 255, 0.7); font-size: 15px; font-weight: 700; display: grid; grid-template-columns: auto auto; gap: 4px 16px; text-align: left; }
+  .statbox b { font-family: var(--display); font-weight: 400; color: var(--yellow); }
+
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; background: #c2362b; font-family: var(--display); font-size: 28px; letter-spacing: 2px; padding: 24px; text-align: center; }
+  .rotate { display: none; position: fixed; left: 50%; bottom: 14px; translate: -50% 0; padding: 8px 14px; border-radius: 999px; background: rgba(20, 18, 31, 0.75); font-weight: 800; font-size: 13px; pointer-events: none; white-space: nowrap; }
+  @media (orientation: portrait) and (max-width: 700px) { .rotate { display: block; } body.playing .rotate { display: none; } }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div class="vignette"></div>
+
+<div id="hud" class="hidden">
+  <div class="top">
+    <div class="pcard teddy" id="pc0">
+      <div class="face"><img alt=""></div>
+      <div class="col">
+        <div class="row"><span class="nm">TEDDY</span><span class="who">1P</span><span class="power">POWER!</span></div>
+        <div class="hp"><b class="lag"></b><b class="fill"></b></div>
+      </div>
+      <span class="spec" title="Special"><span>🥊</span></span>
+    </div>
+    <div class="mid">
+      <div class="floorchip"><span id="floorTxt">FLOOR 1</span><span class="dots" id="dots"><i></i><i></i><i></i><i></i><i></i></span></div>
+      <div class="stats"><span id="livesTxt">❤️5</span><span id="timeTxt" class="time">⏱180</span><span id="scoreTxt" class="score">0</span></div>
+      <div class="ibtns">
+        <button id="pauseBtn" class="ibtn" title="Pause (P)">❚❚</button>
+        <button class="ibtn muteBtn" title="Sound (M)">🔊</button>
+      </div>
+    </div>
+    <div class="pcard right tommy" id="pc1">
+      <div class="face"><img alt=""></div>
+      <div class="col">
+        <div class="row"><span class="nm">TOMMY</span><span class="who">2P</span><span class="power">POWER!</span></div>
+        <div class="hp"><b class="lag"></b><b class="fill"></b></div>
+      </div>
+      <span class="spec" title="Special"><span>✌️</span></span>
+    </div>
+    <button class="budcard" id="budCard" title="Call your brother (T)">
+      <span class="bface"><img alt=""></span>
+      <span class="btxt"><span class="bl1">CALL <kbd>T</kbd></span><span class="bl2" id="budName">TOMMY!</span></span>
+    </button>
+  </div>
+  <button class="team" id="teamBtn" title="High five (T or Enter)">
+    <span class="tf"><img alt="" id="teamF0"><img alt="" id="teamF1"></span>
+    <span class="tt"><b>HIGH FIVE! <kbd>T</kbd></b><span class="bar"></span></span>
+  </button>
+  <div id="bossbar" class="hidden">
+    <span class="be" id="bossEmoji">🥋</span>
+    <div class="col"><span class="nm" id="bossName">BOSS</span><div class="hp"><b class="lag"></b><b class="fill"></b></div></div>
+  </div>
+  <div id="go" class="hidden">GO</div>
+  <div id="banner" class="banner"></div>
+  <div id="bsub" class="bsub"></div>
+  <div id="toasts"></div>
+  <div id="wiggle" class="hidden"><b>WIGGLE FREE!</b><small>press any button, fast!</small><span class="bar"><i></i></span></div>
+</div>
+
+<div id="touch" class="hidden">
+  <div class="c0">
+    <div class="pad" data-pad="0"><span class="ar u">⬆<small>JUMP</small></span><span class="ar d">⬇<small>DUCK</small></span><span class="ar l">◀</span><span class="ar r">▶</span></div>
+    <div class="tbtns">
+      <button class="tbtn spc" data-act="special" data-side="0"><span class="se">🥊</span><small>SPECIAL</small></button>
+      <button class="tbtn kick" data-act="kick" data-side="0">🦶<small>KICK</small></button>
+      <button class="tbtn punch" data-act="punch" data-side="0">👊<small>PUNCH</small></button>
+    </div>
+  </div>
+  <div class="c1">
+    <div class="pad" data-pad="1"><span class="ar u">⬆<small>JUMP</small></span><span class="ar d">⬇<small>DUCK</small></span><span class="ar l">◀</span><span class="ar r">▶</span></div>
+    <div class="tbtns">
+      <button class="tbtn spc" data-act="special" data-side="1"><span class="se">✌️</span><small>SPECIAL</small></button>
+      <button class="tbtn kick" data-act="kick" data-side="1">🦶<small>KICK</small></button>
+      <button class="tbtn punch" data-act="punch" data-side="1">👊<small>PUNCH</small></button>
+    </div>
+  </div>
+</div>
+
+<div id="title" class="screen hidden">
+  <div class="logo" id="logo" data-no-lang><span class="l1" id="logo1">KUNG FU</span><span class="l2" id="logo2">TT</span></div>
+  <p class="tag" id="tagline">Climb the temple. Save the Golden Panda!</p>
+  <div class="modes">
+    <button id="play1" class="btn pulse">▶ 1 PLAYER<small>Teddy or Tommy (+ call your brother)</small></button>
+    <button id="play2" class="btn alt">👫 2 PLAYERS<small>brothers together, one keyboard</small></button>
+  </div>
+  <div class="levels" role="radiogroup" aria-label="Difficulty">
+    <button class="lvl" data-level="easy" role="radio"><span class="e">🐣</span><span><b>EASY</b><small>no timer, lots of dumplings</small></span></button>
+    <button class="lvl" data-level="normal" role="radio"><span class="e">🔥</span><span><b>NORMAL</b><small>the real temple, with a timer</small></span></button>
+  </div>
+  <div class="floors hidden" id="floorPick" role="radiogroup" aria-label="Floor"><span class="lbl">FLOOR</span></div>
+  <div class="best hidden" id="bestTxt"></div>
+  <div class="keys">
+    <span></span><span class="h p1">TEDDY · 1P</span><span class="h p2">TOMMY · 2P</span>
+    <span>walk · jump · duck</span><span><kbd>A</kbd><kbd>D</kbd> · <kbd>W</kbd> · <kbd>S</kbd></span><span><kbd>←</kbd><kbd>→</kbd> · <kbd>↑</kbd> · <kbd>↓</kbd></span>
+    <span>punch · kick · special</span><span><kbd>F</kbd><kbd>G</kbd><kbd>H</kbd></span><span><kbd>K</kbd><kbd>L</kbd><kbd>J</kbd></span>
+    <span>low punch / low kick</span><span>hold <kbd>S</kbd> + <kbd>F</kbd>/<kbd>G</kbd></span><span>hold <kbd>↓</kbd> + <kbd>K</kbd>/<kbd>L</kbd></span>
+    <span>call your brother / high five</span><span><kbd>T</kbd></span><span><kbd>Enter</kbd></span>
+  </div>
+  <p class="touch-hint">The pad walks, jumps and ducks. 👊 punch, 🦶 kick, and the special. Tap your brother's face to call him! On an iPad, two players can play side by side.</p>
+  <div class="credit">built with <b>Claude Code</b></div>
+  <button class="ibtn muteBtn corner" title="Sound (M)">🔊</button>
+</div>
+
+<div id="pick" class="screen hidden">
+  <div class="ttl">WHO'S PLAYING?</div>
+  <div class="picks">
+    <button class="pick teddy" data-hero="teddy"><img alt=""><span class="nm">TEDDY</span><span class="sp">🥊 BOXING COMBO special<br>jab · jab · straight!</span></button>
+    <button class="pick tommy" data-hero="tommy"><img alt=""><span class="nm">TOMMY</span><span class="sp">✌️ Y POSE special<br>a stun wave all around</span></button>
+  </div>
+  <p class="hint" data-zh="点一个兄弟 · <kbd>←</kbd><kbd>→</kbd> 和 <kbd>回车</kbd> · <kbd>Esc</kbd> 返回 · 另一个兄弟随时都能叫来帮忙！">Tap a brother · <kbd>←</kbd><kbd>→</kbd> and <kbd>Enter</kbd> · <kbd>Esc</kbd> back · the other brother can be called in any time!</p>
+  <button id="pickBack" class="btn small ghost">◀ BACK</button>
+</div>
+
+<div id="pause" class="screen hidden">
+  <div class="big">PAUSED</div>
+  <div class="btnrow">
+    <button id="resumeBtn" class="btn">▶ RESUME</button>
+    <button id="quitBtn" class="btn small ghost">MENU</button>
+  </div>
+  <p class="hint">P · Esc · Space to resume · Q for the menu · M sound</p>
+</div>
+
+<div id="over" class="screen hidden">
+  <div class="big">OH NO!</div>
+  <p class="tag" id="overSub">The temple wins this time. Try that floor again!</p>
+  <div class="btnrow">
+    <button id="againBtn" class="btn pulse">↻ TRY AGAIN</button>
+    <button id="overMenuBtn" class="btn small ghost">MENU</button>
+  </div>
+  <p class="hint">Enter: try again · Esc: menu</p>
+</div>
+
+<div id="win" class="screen hidden">
+  <div class="faces" id="winFaces"></div>
+  <div class="big">YOU DID IT!</div>
+  <p class="tag">The Golden Panda is free! Thank you, kung fu brothers!</p>
+  <div class="statbox" id="winStats"></div>
+  <div class="btnrow">
+    <button id="playAgainBtn" class="btn pulse">↻ PLAY AGAIN</button>
+    <button id="winMenuBtn" class="btn small ghost">MENU</button>
+  </div>
+  <p class="hint">Enter: play again · Esc: menu</p>
+</div>
+
+<div id="fade"></div>
+<div id="loading">LOADING…</div>
+<div class="rotate">↻ Turn sideways for a bigger temple!</div>
+
+<script src="kit/three.min.js"></script>
+<script src="kit/gfx.js"></script>
+<script src="kit/people.js"></script>
+<script src="kit/roster.js"></script>
+<script src="kit/portraits.js"></script>
+<script src="kit/sound.js"></script>
+<script src="kit/lang.js"></script>
+<script src="kit/help.js"></script>
+<script src="js/title.js"></script>
+<script src="js/floors.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/bot.js"></script>
+<script src="js/checks.js"></script>
+<script src="js/input.js"></script>
+<script src="js/poses.js"></script>
+<script src="js/models.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/sfx.js"></script>
+<script src="js/game.js"></script>
+<script src="js/keys.js"></script>
+<script src="js/zh.js"></script>
+</body>
+</html>
