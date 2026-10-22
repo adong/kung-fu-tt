@@ -36,7 +36,7 @@
     'LEVEL': '难度', '🐣 EASY': '🐣 简单', '🔥 NORMAL': '🔥 普通', '↻ PLAY AGAIN': '↻ 再玩一次', 'Enter: play again · Esc: menu': '回车：再玩一次 · Esc：菜单',
     'LOADING…': '加载中…', '↻ Turn sideways for a bigger temple!': '↻ 横过来玩，寺庙更大！',
     // the HUD
-    'POWER!': '超级力量！', 'CALL': '叫', 'HIGH FIVE!': '击掌！', 'BOSS': '大王', 'WIGGLE FREE!': '扭一扭，挣脱！', 'press any button, fast!': '快快按任意键！',
+    'POWER!': '超级力量！', 'CALL': '叫', 'HIGH FIVE!': '击掌！', 'BOSS': '大王', 'WIGGLE FREE!': '扭一扭，挣脱！', 'press any key or tap, fast!': '快快按任意键或点屏幕！',
     'JUMP': '跳', 'DUCK': '蹲下', 'SPECIAL': '绝招', 'KICK': '踢腿', 'PUNCH': '出拳', 'Special': '绝招',
     'GO': '出发', '⬅ GO': '⬅ 出发', 'GO ➡': '出发 ➡',
     'Pause (P)': '暂停 (P)', 'Sound (M)': '声音 (M)', 'Call your brother (T)': '叫兄弟 (T)', 'High five (T or Enter)': '击掌 (T 或 回车)',

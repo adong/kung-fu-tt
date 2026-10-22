@@ -436,7 +436,7 @@
   <div id="banner" class="banner"></div>
   <div id="bsub" class="bsub"></div>
   <div id="toasts"></div>
-  <div id="wiggle" class="hidden"><b>WIGGLE FREE!</b><small>press any button, fast!</small><span class="bar"><i></i></span></div>
+  <div id="wiggle" class="hidden"><b>WIGGLE FREE!</b><small>press any key or tap, fast!</small><span class="bar"><i></i></span></div>
 </div>
 
 <div id="touch" class="hidden">
@@ -2085,11 +2085,11 @@ window.KF_FLOORS = [
   // 🔥 NORMAL is for Teddy (8): the classic pace and a relaxed timer.
   const DIFF = {
     easy: {
-      lives: 5, timer: 0, speed: 0.62, gap: [3.0, 4.6], max: 3, take: 0.5, mash: 4, grabMax: 2.4, drain: 5, drainFloor: 15,
+      lives: 5, timer: 0, speed: 0.62, gap: [3.0, 4.6], max: 3, take: 0.5, mash: 3, grabMax: 1.5, drain: 5, drainFloor: 15,
       drop: 0.45, bossHp: 0.55, tele: 1.55, shot: 0.68, bossDmg: 0.5, spec: 0.6, lenK: 0.8, revive: 70, startFood: true,
     },
     normal: {
-      lives: 3, timer: 180, speed: 1, gap: [1.1, 2.1], max: 5, take: 1, mash: 7, grabMax: 4.5, drain: 9, drainFloor: 0,
+      lives: 3, timer: 180, speed: 1, gap: [1.5, 2.6], max: 4, take: 1, mash: 6, grabMax: 3.0, drain: 9, drainFloor: 0,
       drop: 0.12, bossHp: 1, tele: 1, shot: 1, bossDmg: 1, spec: 1, lenK: 1, revive: 50, startFood: false,
     },
   };
@@ -2108,6 +2108,7 @@ window.KF_FLOORS = [
     ywave: { len: 40, waveAt: 12, special: true },
   };
   const SPECIAL = { teddy: 'combo', tommy: 'ywave' };
+  const SELF_UP = 8; // 2 players: seconds before a knocked-out brother nobody helps gets up by himself
   const SPEC_CD = { combo: 5, ywave: 6 };
 
   const DEF = {
@@ -2177,7 +2178,7 @@ window.KF_FLOORS = [
     const a = 12, b = W.camA - halfW - 3;
     for (let i = 0; i < n; i++) {
       const u = a + ((i + 0.5) / n) * (b - a) + (W.rnd() - 0.5) * 3;
-      W.pots.push({ id: W.nextId++, u, y: 4.7, vy: 0, state: 'hang', st: 0, kind: W.rnd() < 0.5 ? 'dragon' : 'confetti' });
+      W.pots.push({ id: W.nextId++, u, y: 2.9, vy: 0, state: 'hang', st: 0, kind: W.rnd() < 0.5 ? 'dragon' : 'confetti' });
     }
     if (D.startFood) for (const f of [0.3, 0.62]) W.items.push({ id: W.nextId++, u: f * W.camA, y: 0, kind: f < 0.5 ? 'dumpling' : 'bun', emoji: f < 0.5 ? '🥟' : '🍞', heal: f < 0.5 ? 20 : 35, t: 0, life: Infinity });
     return W;
@@ -2412,14 +2413,15 @@ window.KF_FLOORS = [
     if (p && p.state === 'grabbed' && huggersOn(W, p).length === 0) { p.state = 'idle'; p.noGrab = 0.8; }
   }
 
-  // how: 'free' (wiggled out: they get dizzy), 'drop' (just let go)
+  // how: 'free' (wiggled out) or 'tired' (held too long): they stagger off dizzy; 'drop' (hit, knocked out): they let go
   function releaseHuggers(W, p, how) {
+    const off = how === 'free' || how === 'tired';
     for (const e of W.enemies) {
       if (e.grab !== p.slot) continue;
       e.grab = null;
-      if (e.state === 'hug') { e.state = 'dizzy'; e.st = how === 'free' ? 1.4 : 0.8; e.vu = sgn(e.u - p.u) * 3; }
+      if (e.state === 'hug') { e.state = 'dizzy'; e.st = off ? 1.6 : 0.8; e.vu = sgn(e.u - p.u) * (off ? 4.5 : 3); e.hugT = 0; }
     }
-    if (p.state === 'grabbed') { p.state = 'idle'; p.noGrab = 0.9; p.wiggle = 0; }
+    if (p.state === 'grabbed') { p.state = 'idle'; p.noGrab = off ? 1.5 : 0.9; p.wiggle = 0; p.grabT = 0; }
   }
 
   function stepGrabs(W) {
@@ -2436,12 +2438,13 @@ window.KF_FLOORS = [
         ev(W, 'free', { p: p.slot, u: p.u });
         continue;
       }
-      // a hug can't last for ever: a tired hugger lets go
-      for (const e of hs) {
-        e.hugT += DT;
-        if (e.hugT >= W.D.grabMax) { e.grab = null; e.state = 'dizzy'; e.st = 1.0; e.vu = sgn(e.u - p.u) * 2; ev(W, 'tired', { u: e.u, id: e.id }); }
+      // a hug never lasts long: after grabMax (1.5 s on EASY) every hugger on you gets tired and lets go
+      for (const e of hs) e.hugT += DT;
+      if (p.grabT >= W.D.grabMax) {
+        for (const e of hs) ev(W, 'tired', { u: e.u, id: e.id });
+        releaseHuggers(W, p, 'tired');
+        ev(W, 'free', { p: p.slot, u: p.u, tired: true });
       }
-      if (!huggersOn(W, p).length) { p.state = 'idle'; p.noGrab = 0.9; p.wiggle = 0; ev(W, 'free', { p: p.slot, u: p.u, tired: true }); }
     }
   }
 
@@ -2797,7 +2800,7 @@ window.KF_FLOORS = [
       case 'bao':
         if (W.shots.some((s) => s.by === b.id)) return { wait: 0.3 };
         if (dist < 1.8) return { name: 'shove', tele: 0.45 * T, act: 0.15, rec: 0.35, then: 'hop' };
-        if (dist < 3.6) return roomBehind(W, b, p) ? { hop: true } : { name: 'shove', tele: 0.45 * T, act: 0.15, rec: 0.35 };
+        if (dist < 3.6 && roomBehind(W, b, p)) return { hop: true }; // back to the stairs: no room to hop, so throw
         if (dist > 6.8) return { walk: 5.0, max: 1.4 };
         return { name: 'boomer', band: band(), tele: 0.6 * T, act: 0.2, rec: 0.2 };
       case 'belly':
@@ -3141,8 +3144,13 @@ window.KF_FLOORS = [
       if (Math.min(...downs.map((p) => p.koT)) > 1.5) loseLife(W, 'ko');
       return;
     }
-    // 2 players: the other brother helps him up
+    // 2 players: the other brother helps him up, and if nobody comes he gets up on his own after a while
     for (const p of downs) {
+      if (p.koT >= SELF_UP) {
+        p.ko = false; p.state = 'getup'; p.st = 0.8; p.hp = W.D.revive; p.inv = 2.2; p.reviveT = 0;
+        ev(W, 'revive', { p: p.slot, by: p.slot, self: true, u: p.u });
+        continue;
+      }
       const helper = W.players.find((q) => q !== p && !q.ko && q.state !== 'grabbed' && Math.abs(q.u - p.u) < 1.3 && q.y < 0.2);
       if (helper) p.reviveT += DT; else p.reviveT = Math.max(0, p.reviveT - DT * 0.5);
       if (p.reviveT >= 0.8) {
@@ -3168,6 +3176,8 @@ window.KF_FLOORS = [
     if (W.phase === 'clear') {
       for (const p of W.players) {
         if (p.ko) { p.ko = false; p.hp = Math.max(p.hp, 30); }
+        // the boss is down: stand up straight and wait for the celebration
+        if (p.state === 'crouch' || p.state === 'walk' || p.state === 'grabbed') { p.state = 'idle'; p.crouch = false; p.move = null; }
         if (p.y > 0 || p.vy > 0) airborne(W, p);
         if (W.pt >= 1.0 && p.state !== 'celebrate') { p.state = 'celebrate'; p.st = 99; p.move = null; p.face = W.mode === '2p' ? sgn(W.players[1 - p.slot].u - p.u) : 1; ev(W, 'celebrate', { p: p.slot, who: p.id }); }
       }
@@ -3218,7 +3228,7 @@ window.KF_FLOORS = [
   }
 
   root.KF_SIM = {
-    DT, DIFF, MOVES, DEF, BOSSES, SPECIAL, SPEC_CD, FOOD, TREATS, STAND_H, CROUCH_H, WALK, JUMP_V, GRAV,
+    DT, DIFF, MOVES, DEF, BOSSES, SPECIAL, SPEC_CD, SELF_UP, FOOD, TREATS, STAND_H, CROUCH_H, WALK, JUMP_V, GRAV,
     create, step, call, enterArena, hurt, knockOut, loseLife, spawn, spawnBoss, huggersOn, nearestPlayer, minPlayerDist, arenaLo, bodyTop, bodyBot, hittable,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -3384,7 +3394,7 @@ window.KF_FLOORS = [
 
   // Play one floor with the autopilot. Returns { ok, why, t, ... }.
   function runFloor(cfg) {
-    const W = Sim.create({ floor: cfg.floor, difficulty: cfg.diff, mode: cfg.mode, hero: cfg.hero, seed: cfg.seed || 1, halfW: cfg.halfW, lives: cfg.lives });
+    const W = Sim.create({ floor: cfg.floor, difficulty: cfg.diff, mode: cfg.mode, hero: cfg.hero, seed: cfg.seed || 1, halfW: cfg.halfW || 4.6, lives: cfg.lives });
     if (cfg.tamper) cfg.tamper(W);
     const mems = W.players.map(() => ({ opts: { call: cfg.call, callAlways: cfg.call, idle: cfg.idle, callEvery: 10 } }));
     const problems = [];
@@ -3421,9 +3431,10 @@ window.KF_FLOORS = [
   function floorsCheck(o) {
     o = o || {};
     const out = [];
+    // the game's view is 4.6 m either side on a wide screen, 4.0 on an iPad, 3.2 on a portrait phone
     const setups = [
-      { mode: '1p', hero: 'teddy' }, { mode: '1p', hero: 'tommy' }, { mode: '2p' },
-      { mode: '1p', hero: 'tommy', call: true },
+      { mode: '1p', hero: 'teddy' }, { mode: '1p', hero: 'tommy', halfW: 4.0 }, { mode: '2p', halfW: 4.0 },
+      { mode: '1p', hero: 'tommy', call: true }, { mode: '1p', hero: 'teddy', halfW: 3.2 },
     ];
     const seeds = o.seeds || [1, 2];
     for (const diff of ['easy', 'normal']) {
@@ -3432,7 +3443,7 @@ window.KF_FLOORS = [
         if (!floors.includes(f)) continue;
         for (const s of setups) for (const seed of seeds) {
           const r = runFloor(Object.assign({ floor: f, diff, seed, idle: o.idle, sabotage: o.sabotage }, s));
-          out.push(Object.assign({ name: `${diff} floor ${f + 1} ${s.mode}${s.hero ? ' ' + s.hero : ''}${s.call ? ' +buddy' : ''} seed ${seed}` }, r));
+          out.push(Object.assign({ name: `${diff} floor ${f + 1} ${s.mode}${s.hero ? ' ' + s.hero : ''}${s.call ? ' +buddy' : ''} view ${s.halfW || 4.6} seed ${seed}` }, r));
         }
       }
     }
@@ -3441,7 +3452,7 @@ window.KF_FLOORS = [
 
   // ---- a quiet room with nobody walking in, for the scripted checks
   function room(o) {
-    const W = Sim.create(Object.assign({ floor: 0, difficulty: 'easy', noSpawn: true, seed: 3 }, o));
+    const W = Sim.create(Object.assign({ floor: 0, difficulty: 'easy', noSpawn: true, seed: 3, halfW: 4.6 }, o));
     W.pots = []; W.items = [];
     while (W.phase === 'intro') Sim.step(W, []);
     return W;
@@ -3489,7 +3500,7 @@ window.KF_FLOORS = [
           if (idle && o.quick) continue;
           for (const mode of ['1p', '2p']) {
             if (idle && mode === '2p') continue;
-            const W = Sim.create({ floor: f, difficulty: diff, mode, hero: f % 2 ? 'tommy' : 'teddy', seed: 7 + f, lives: idle ? 1 : 9 });
+            const W = Sim.create({ floor: f, difficulty: diff, mode, hero: f % 2 ? 'tommy' : 'teddy', seed: 7 + f, lives: idle ? 1 : 9, halfW: mode === '2p' ? 3.2 : 4.0 });
             while (W.phase === 'intro') Sim.step(W, []);
             Sim.enterArena(W);
             const mems = W.players.map(() => ({ opts: { idle } }));
@@ -3586,9 +3597,10 @@ window.KF_FLOORS = [
       const [a, b] = W.players;
       b.u = a.u + 5;
       Sim.hurt(W, b, 999, b.u + 1);
+      const lives = W.lives, t0 = W.t;
       const t = seen(W, 20, [], 'revive');
-      const ok = t < 0 && b.ko;
-      out.push({ name: '2P: nobody comes to help → he stays down (revive needs the brother)', ok, problems: ok ? [] : ['got up on his own'] });
+      const ok = t > 0 && t - t0 >= Sim.SELF_UP - 0.1 && t - t0 <= Sim.SELF_UP + 0.5 && !b.ko && W.lives === lives;
+      out.push({ name: `2P: nobody comes to help → he gets up on his own after ${Sim.SELF_UP} s (never stuck, no life lost)`, ok, took: t > 0 ? +(t - t0).toFixed(1) : null, problems: ok ? [] : [`revive at ${t > 0 ? (t - t0).toFixed(1) : 'never'}, ko ${b.ko}, lives ${W.lives}`] });
     }
     {
       const W = room({ difficulty: 'normal', mode: '2p' });
@@ -3650,7 +3662,7 @@ window.KF_FLOORS = [
 
   // the magician's copies must never pop up on a brother either
   function copiesCheck() {
-    const W = Sim.create({ floor: 3, difficulty: 'normal', seed: 11, lives: 9 });
+    const W = Sim.create({ floor: 3, difficulty: 'normal', seed: 11, lives: 9, halfW: 4.0 });
     while (W.phase === 'intro') Sim.step(W, []);
     Sim.enterArena(W);
     let closest = Infinity, copies = 0;
@@ -3697,7 +3709,9 @@ window.KF_FLOORS = [
 <script>
 /* Kung Fu TT: controls. The keyboard for one or two brothers, and an on-screen d-pad with PUNCH, KICK and SPECIAL
    buttons for touch. Presses are latched until the game reads them, so a tap shorter than a frame still counts, and
-   every fresh press also counts as a wiggle when a hugger has you.
+   every fresh press counts as a wiggle when a hugger has you: any key at all (even ones the game doesn't use), and a
+   tap anywhere on the screen (js/game.js calls mashAll).
+   The keys are as they look on screen: → always walks right. js/game.js turns that into the rules' direction.
      Teddy (player 1): A D walk, W jump, S crouch, F punch, G kick, H special, T call / high five
      Tommy (player 2): ← → walk, ↑ jump, ↓ crouch, K punch, L kick, J special, Enter call / high five
    In 1 player both sets drive you, and Space jumps too. */
@@ -3721,14 +3735,19 @@ window.KF_FLOORS = [
 
   const sideOf = (s) => (twoPlayer ? s : 0);
 
+  const NOT_A_WIGGLE = /^(Shift|Control|Alt|Meta|CapsLock|Tab|Fn|OS)/;
   function onKey(e, down) {
     if (e.metaKey || e.ctrlKey || e.altKey) return false;
     const m = KEYS[e.code];
-    if (!m) return false;
+    if (!m) {
+      // any other key still wiggles you free from a hug
+      if (down && !e.repeat && !NOT_A_WIGGLE.test(e.code || '')) mashAll();
+      return false;
+    }
     if (e.code === 'Space' && twoPlayer) return false;
     const side = sideOf(m[0]), act = m[1];
     if (down) {
-      if (!e.repeat) { mash[side]++; if (!HELD[act]) latched[side][act] = true; }
+      if (!e.repeat) { mash[side]++; latched[side][act] = true; } // a tap shorter than a frame still turns you round
       if (HELD[act]) held[side][e.code] = act;
     } else delete held[side][e.code];
     return true;
@@ -3754,7 +3773,7 @@ window.KF_FLOORS = [
     const h = held[s], l = latched[s], pd = pads[s];
     const has = (a) => { for (const k in h) if (h[k] === a) return true; return false; };
     const o = {
-      l: has('l') || pd.l, r: has('r') || pd.r, down: has('down') || pd.down,
+      l: has('l') || pd.l || !!l.l, r: has('r') || pd.r || !!l.r, down: has('down') || pd.down || !!l.down,
       jump: !!l.jump, punch: !!l.punch, kick: !!l.kick, special: !!l.special, call: !!l.call, mash: mash[s],
     };
     for (const k in l) delete l[k];
@@ -3763,6 +3782,7 @@ window.KF_FLOORS = [
   }
 
   function press(s, act) { latched[s][act] = true; mash[s]++; }
+  function mashAll() { mash[0]++; mash[1]++; }
 
   // ---------------------------------------------------------------- touch
 
@@ -3810,7 +3830,7 @@ window.KF_FLOORS = [
   }
 
   window.KF_INPUT = {
-    read, press, clear, bindTouch,
+    read, press, mashAll, clear, bindTouch,
     setTwoPlayer(v) { twoPlayer = !!v; clear(); },
   };
 })();
@@ -4329,7 +4349,7 @@ window.KF_FLOORS = [
   }
 
   function shadow() {
-    const m = new T.Mesh(new T.CircleGeometry(0.42, 20), new T.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.22, depthWrite: false }));
+    const m = new T.Mesh(new T.CircleGeometry(0.42, 20), new T.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.14, depthWrite: false }));
     m.rotation.x = -Math.PI / 2;
     m.position.y = 0.012;
     return m;
@@ -4408,7 +4428,8 @@ window.KF_FLOORS = [
   }
 
   // Build one floor's hall. Returns { group, update(dt, t), panda, cage }.
-  function build(scene, W) {
+  function build(scene, W, o) {
+    const aniso = (o && o.aniso) || 1;
     const F = W.F, d = W.dir, L = W.L;
     const group = new T.Group();
     scene.add(group);
@@ -4421,8 +4442,10 @@ window.KF_FLOORS = [
     // floor
     const ft = floorTexture(F);
     ft.repeat.set(len / 4, 4.5);
+    ft.anisotropy = aniso; // the planks stay sharp toward the back
     const floor = new T.Mesh(new T.BoxGeometry(len, 0.3, 14), mat('#ffffff', { map: ft, roughness: 0.8 }));
     floor.position.set(x(mid), -0.15, 3.8);
+    floor.receiveShadow = true;
     group.add(floor);
     // a dark board across the front, and a red carpet runner down the middle of the lane
     const edge = new T.Mesh(new T.BoxGeometry(len, 0.02, 0.18), mat(G().shade(F.floor, -0.45)));
@@ -4430,6 +4453,7 @@ window.KF_FLOORS = [
     group.add(edge);
     const runner = new T.Mesh(new T.BoxGeometry(len, 0.02, 1.7), mat(G().shade(F.pillar, -0.1), { roughness: 0.95 }));
     runner.position.set(x(mid), 0.004, 0.0);
+    runner.receiveShadow = true;
     group.add(runner);
     for (const z of [-0.85, 0.85]) {
       const s = new T.Mesh(new T.BoxGeometry(len, 0.022, 0.08), mat('#e8b84a'));
@@ -4440,6 +4464,7 @@ window.KF_FLOORS = [
     // back wall, bay by bay
     const wt = wallTexture(F);
     wt.repeat.set(len / BAY, 1);
+    wt.anisotropy = aniso;
     const wall = new T.Mesh(new T.PlaneGeometry(len, 10), mat('#ffffff', { map: wt, roughness: 0.95 }));
     wall.position.set(x(mid), 5, -3.1);
     group.add(wall);
@@ -4910,20 +4935,31 @@ window.KF_FLOORS = [
   const canvas = $('game');
   const renderer = new T.WebGLRenderer({ canvas, antialias: true });
   renderer.outputEncoding = T.sRGBEncoding;
-  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  // crisp: draw at least 1.5x on a 1x screen (smoother edges), up to 2x on a Retina screen
+  renderer.setPixelRatio(Math.min(2, Math.max(1.5, window.devicePixelRatio || 1)));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = T.PCFSoftShadowMap;
+  const ANISO = renderer.capabilities.getMaxAnisotropy();
   const scene = new T.Scene();
   const FOV = 30, TAN = Math.tan((FOV / 2) * PI / 180);
   const camera = new T.PerspectiveCamera(FOV, 1, 0.1, 400);
   const hemi = new T.HemisphereLight('#fff6e8', '#8a5a3a', 0.95);
-  const sun = new T.DirectionalLight('#fff1d6', 0.9);
-  sun.position.set(-3, 9, 10);
-  scene.add(hemi, sun);
+  const sun = new T.DirectionalLight('#fff1d6', 0.95);
+  const SUN = new T.Vector3(-3, 9, 10); // from the front left and above, so faces are lit; it follows the camera
+  sun.position.copy(SUN);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 7, bottom: -5, near: 1, far: 40 });
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.03;
+  scene.add(hemi, sun, sun.target);
   Fx.init(scene);
 
   let vw = 0, vh = 0;
   const aspect = () => (window.innerWidth || 800) / (window.innerHeight || 600);
-  // How much hall fits across the screen: less on a narrow (portrait) screen, so the brothers stay big enough.
-  const viewHalfW = () => { const a = aspect(); return a >= 1.6 ? 6.6 : a >= 1.3 ? 5.8 : a >= 1.0 ? 5.0 : 4.2; };
+  // How much hall fits across the screen (half of it, in metres). Close in, so the brothers are big: about 45% of the
+  // screen's height on a wide screen, 40% at 4:3. A narrow (portrait) screen shows less hall.
+  const viewHalfW = () => { const a = aspect(); return a >= 1.6 ? 4.6 : a >= 1.3 ? 4.0 : a >= 1.0 ? 3.6 : 3.2; };
   function resize() {
     const w = window.innerWidth || 800, h = window.innerHeight || 600;
     if (w === vw && h === vh) return;
@@ -4936,7 +4972,7 @@ window.KF_FLOORS = [
 
   // ---------------------------------------------------------------- faces for the menus and the HUD
 
-  const faces = Kit.portraits([Kit.roster.get('teddy'), Kit.roster.get('tommy')], { size: 152 });
+  const faces = Kit.portraits([Kit.roster.get('teddy'), Kit.roster.get('tommy')], { size: 304 }); // sharp on Retina menus
   document.querySelectorAll('.pick').forEach((b) => { b.querySelector('img').src = faces[b.dataset.hero]; });
   $('teamF0').src = faces.teddy; $('teamF1').src = faces.tommy;
 
@@ -4972,11 +5008,22 @@ window.KF_FLOORS = [
 
   // ---------------------------------------------------------------- views
 
-  const SIDE = 0.35;
+  const SIDE = 0.62; // turned this far from side-on toward the camera, so faces show
   const yaw = (screenFace, a) => (screenFace > 0 ? -(PI / 2 + a) : PI / 2 + a);
+
+  // every mesh casts a shadow, and painted shirts stay sharp when seen at an angle
+  function crisp(obj) {
+    obj.traverse((o) => {
+      if (!o.isMesh) return;
+      o.castShadow = true;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (m && m.map && m.map.anisotropy !== ANISO) { m.map.anisotropy = ANISO; m.map.needsUpdate = true; }
+    });
+    return obj;
+  }
 
   function personView(kind, p, scale) {
     const root = new T.Group();
+    crisp(p.root);
     root.add(p.root);
     p.root.scale.setScalar(scale || 1);
     const sh = Models.shadow();
@@ -5002,7 +5049,7 @@ window.KF_FLOORS = [
     if (e.type === 'thrower') return personView('enemy', Models.person(Models.LOOKS.thrower[e.id % 2], ['bag']), 1);
     if (e.type === 'copy') return personView('enemy', Models.person(Models.LOOKS.puff, ['wizard']), BOSS_SCALE.puff);
     const root = new T.Group();
-    const m = e.type === 'imp' ? Models.imp(e.id) : e.type === 'dragon' ? Models.dragon() : Models.confettiBall();
+    const m = crisp(e.type === 'imp' ? Models.imp(e.id) : e.type === 'dragon' ? Models.dragon() : Models.confettiBall());
     root.add(m);
     const sh = Models.shadow();
     sh.scale.setScalar(e.type === 'dragon' ? 0.9 : 0.7);
@@ -5041,7 +5088,7 @@ window.KF_FLOORS = [
     return { kind: 'item', root, sp };
   }
 
-  function potView() { const g = Models.pot(); scene.add(g); return { kind: 'pot', root: g }; }
+  function potView() { const g = crisp(Models.pot()); scene.add(g); return { kind: 'pot', root: g }; }
 
   const zOf = (id) => ((id * 37) % 7) / 7 * 0.6 - 0.3;
 
@@ -5081,9 +5128,9 @@ window.KF_FLOORS = [
         if (e.type === 'boss') Poses.boss(v.p, e, t, dt);
         else Poses.enemy(v.p, e, t, dt);
         v.p.root.position.y = e.y;
-        if (e.state === 'bonked') { v.p.root.rotation.z += dt * 14 * -sf; v.p.root.rotation.y = yaw(sf, 0.2); }
+        if (e.state === 'bonked') { v.p.root.rotation.z += dt * 14 * -sf; v.p.root.rotation.y = yaw(sf, 0.4); }
         else {
-          const want = e.type === 'boss' && e.state === 'act' && e.atk && e.atk.name === 'spin' ? v.p.root.rotation.y + dt * 30 : yaw(sf, 0.28);
+          const want = e.type === 'boss' && e.state === 'act' && e.atk && e.atk.name === 'spin' ? v.p.root.rotation.y + dt * 30 : yaw(sf, 0.5);
           v.p.root.rotation.y = e.type === 'boss' && e.atk && e.atk.name === 'spin' && e.state === 'act' ? want : v.p.root.rotation.y + (want - v.p.root.rotation.y) * Math.min(1, dt * 14);
           v.p.root.rotation.z = 0;
         }
@@ -5148,7 +5195,7 @@ window.KF_FLOORS = [
       Poses.buddy(buddyView.p, B, t, dt);
       buddyView.root.position.set(d * B.u, 0, 0.75);
       buddyView.p.root.position.y = B.y;
-      buddyView.p.root.rotation.y = B.state === 'sig' ? yaw(d * B.face, 1.0) : yaw(d * B.face, 0.3);
+      buddyView.p.root.rotation.y = B.state === 'sig' ? yaw(d * B.face, 1.0) : yaw(d * B.face, 0.55);
       buddyView.shadow.scale.setScalar(buddyView.scale * Math.max(0.3, 1 - B.y * 0.25));
       buddyView.root.visible = true;
       if (B.state === 'fly' && Math.random() < dt * 30) Fx.stars(d * B.u, B.y + 1, 0.8, 1, ['#ffffff', '#8cd8ff']);
@@ -5170,7 +5217,7 @@ window.KF_FLOORS = [
   function syncSmall(v, e, sf, dt, t) {
     const m = v.m;
     m.position.y = e.y;
-    m.rotation.y = yaw(sf, 0.25);
+    m.rotation.y = yaw(sf, 0.45);
     if (e.state === 'bonked') { m.rotation.z += dt * 16 * -sf; return; }
     m.rotation.z = 0;
     if (e.type === 'imp') { const sq = e.y > 0.01 ? 1.12 : 1 - Math.abs(Math.sin(t * 10)) * 0.06; m.scale.set(1 / Math.sqrt(sq), sq, 1 / Math.sqrt(sq)); }
@@ -5239,7 +5286,7 @@ window.KF_FLOORS = [
           Sfx.ko();
           if (W.mode === '2p' && W.players.some((p) => !p.ko)) toast(`HELP ${who(ev.p)} UP!`, 'warn');
           break;
-        case 'revive': Fx.burst('UP YOU GET!', d * ev.u, 2.4, 0.4, true); Sfx.revive(); toast(`${who(ev.by)} HELPED ${who(ev.p)} UP!`, 'save'); break;
+        case 'revive': Fx.burst('UP YOU GET!', d * ev.u, 2.4, 0.4, true); Sfx.revive(); toast(ev.self ? `${who(ev.p)} IS BACK UP!` : `${who(ev.by)} HELPED ${who(ev.p)} UP!`, 'save'); break;
         case 'life':
           if (ev.lives > 0) { toast(ev.why === 'time' ? "TIME'S UP! ❤️ -1" : '❤️ -1', 'warn'); }
           break;
@@ -5443,9 +5490,14 @@ window.KF_FLOORS = [
     camX = cx;
     shake = Math.max(0, shake - dt);
     const sx = shake > 0 ? (Math.random() - 0.5) * shake * 0.6 : 0, sy = shake > 0 ? (Math.random() - 0.5) * shake * 0.4 : 0;
-    const lookY = 1.35 + (a < 1 ? 0.6 : 0);
-    camera.position.set(cx + sx, 2.4 + D * 0.07 + sy, D);
+    // what the camera looks at: the brothers in the middle, or a little higher on screen when the touch buttons
+    // take the bottom, and higher still on a tall portrait screen
+    const lookY = a < 1 ? 2.1 : touchMode ? 1.0 : 1.45;
+    camera.position.set(cx + sx, lookY + 0.9 + D * 0.03 + sy, D);
     camera.lookAt(cx + sx * 0.5, lookY, 0);
+    // the sun (and its shadows) follows the camera along the hall
+    sun.target.position.set(cx, 0, 0);
+    sun.position.set(cx + SUN.x, SUN.y, SUN.z);
   }
 
   // ---------------------------------------------------------------- floors and screens
@@ -5466,13 +5518,19 @@ window.KF_FLOORS = [
     document.body.classList.toggle('two', mode === '2p');
   }
 
+  function clearDemo() {
+    if (demo && demo.views) for (const v of demo.views) disposeObj(v.root);
+    demo = null;
+  }
+
   function buildDemo() {
+    clearDemo();
     clearViews();
     if (hall) { hall.dispose(); hall = null; }
     W = null;
     demo = Sim.create({ floor: Math.min(save.floor || 0, save.reached), mode: '2p', noSpawn: true, halfW: viewHalfW() });
     demo.final = false;
-    hall = Scene.build(scene, demo);
+    hall = Scene.build(scene, demo, { aniso: ANISO });
     demo.views = ['teddy', 'tommy'].map((id, i) => {
       const P = { id };
       const v = playerView(P);
@@ -5536,19 +5594,19 @@ window.KF_FLOORS = [
   }
 
   // carry: { score, lives } from the floor below
-  function startFloor(fi, carry) {
+  function startFloor(fi, carry, seed) {
+    clearDemo();
     clearViews();
     if (hall) { hall.dispose(); hall = null; }
-    demo = null;
     pandaCheer = false;
     celebrateT = 0;
     endT = -1; endKind = null;
     acc = 0;
     Input.setTwoPlayer(mode === '2p');
     Input.clear();
-    W = Sim.create({ floor: fi, difficulty: save.diff, mode, hero: save.hero, seed: (Math.random() * 1e9) | 0, halfW: viewHalfW(), score: carry.score || 0, lives: carry.lives });
+    W = Sim.create({ floor: fi, difficulty: save.diff, mode, hero: save.hero, seed: seed || ((Math.random() * 1e9) | 0), halfW: viewHalfW(), score: carry.score || 0, lives: carry.lives });
     floorScore = W.score;
-    hall = Scene.build(scene, W);
+    hall = Scene.build(scene, W, { aniso: ANISO });
     lag[0] = lag[1] = 1; bossLag.v = 1;
     // the HUD for this set-up
     const p0 = W.players[0];
@@ -5585,7 +5643,7 @@ window.KF_FLOORS = [
 
   function pause(on) {
     if (on && screen === 'play') { showScreen('pause'); Kit.sound.music('pause'); Input.clear(); }
-    else if (!on && screen === 'pause') { showScreen('play'); Kit.sound.music('play'); }
+    else if (!on && screen === 'pause') { Input.clear(); showScreen('play'); Kit.sound.music('play'); }
   }
 
   function showOver() {
@@ -5608,16 +5666,26 @@ window.KF_FLOORS = [
 
   // ---------------------------------------------------------------- the loop
 
+  // A kid's keys are screen keys: → means walk right on screen. The rules count `u` along the hall, which runs leftwards
+  // on floors 1, 3 and 5 (x = dir * u), so there left and right swap on the way in. The autopilot already thinks in u.
+  function humanInput(i) {
+    const inp = Input.read(i);
+    if (W.dir < 0) { const l = inp.l; inp.l = inp.r; inp.r = l; }
+    return inp;
+  }
   function stepSim() {
-    const inputs = W.players.map((P, i) => (autoplay ? Bot.bot(W, P, botMem[i] || (botMem[i] = { opts: { call: W.mode === '1p', callEvery: 14 } })) : Input.read(i)));
+    const inputs = W.players.map((P, i) => (autoplay ? Bot.bot(W, P, botMem[i] || (botMem[i] = { opts: { call: W.mode === '1p', callEvery: 14 } })) : humanInput(i)));
     Sim.step(W, inputs);
     handleEvents();
   }
   const botMem = [];
 
+  let helpWas = false;
   function tick(dt) {
     clock += dt;
     resize();
+    const helpNow = !!(Kit.help && Kit.help.isOpen && Kit.help.isOpen());
+    if (helpNow !== helpWas) { helpWas = helpNow; Input.clear(); }
     if (W && screen === 'play') {
       acc += dt;
       let n = 0;
@@ -5724,6 +5792,8 @@ window.KF_FLOORS = [
     }
   });
 
+  canvas.addEventListener('pointerdown', () => { if (screen === 'play') Input.mashAll(); });
+  $('wiggle').addEventListener('pointerdown', (e) => { e.preventDefault(); Input.mashAll(); });
   window.addEventListener('pointerdown', (e) => {
     gesture();
     if (e.pointerType === 'touch' && !touchMode) { touchMode = true; document.body.classList.add('touch'); showTouch(); }
@@ -5746,15 +5816,15 @@ window.KF_FLOORS = [
       if (o.hero) save.hero = o.hero;
       if (o.difficulty) save.diff = o.difficulty;
       api.autoPause = false;
-      startFloor(o.floor || 0, { score: o.score || 0, lives: o.lives });
+      startFloor(o.floor || 0, { score: o.score || 0, lives: o.lives }, o.seed);
       return api.state();
     },
     // advance by `seconds` right now and draw (the Browser pane throttles hidden frames)
-    step(seconds = 1 / 60) {
+    step(seconds = 1 / 60, o) {
       const n = Math.max(1, Math.round(seconds * 60));
       for (let i = 0; i < n; i++) tick(1 / 60);
-      renderer.render(scene, camera);
-      return api.state();
+      if (!(o && o.draw === false)) renderer.render(scene, camera);
+      return o && o.draw === false ? null : api.state();
     },
     hold(v = true) { held = !!v; return held; },
     autoplay(v = true) { autoplay = !!v; botMem.length = 0; return autoplay; },
@@ -5783,6 +5853,9 @@ window.KF_FLOORS = [
     },
     quiet() { bannerUntil = 1e-6; for (const t of toasts) t.until = 0; updateHud(0); },
     world: () => W,
+    scene,
+    // where a brother's model stands, in world x (= left to right on screen)
+    modelX(slot) { const v = views.get('p' + slot); if (!v) return NaN; v.p.root.updateWorldMatrix(true, false); return new T.Vector3().setFromMatrixPosition(v.p.root.matrixWorld).x; },
     save: () => save,
     calm(v = true) { document.body.classList.toggle('calm', !!v); },
     renderer,
@@ -5800,6 +5873,302 @@ window.KF_FLOORS = [
   $('loading').classList.add('hidden');
   showTitle();
   requestAnimationFrame(frame);
+})();
+
+</script>
+<script>
+/* Kung Fu TT: play checks in the page, driven by real key events (keydown / keyup on window) and real pointer events,
+   the way a kid plays. Run them with game.playCheck() (about a minute; game.playCheck({ quick: true }) for less).
+     direction - on every floor, → (or D) moves the brother right on screen and ← (or A) left, in 1 and 2 players and on
+                 the touch d-pad; he faces the way he walked, and a punch or a low kick hits whoever is there
+     grab      - a hug always ends: doing nothing (EASY lets go after about 1.5 s), mashing any key at all (even ones the
+                 game doesn't use), mashing the arrows, or tapping the screen; the WIGGLE FREE! sign shows while held
+     ko        - in 2 players, a knocked-out brother nobody helps still gets up on his own after a while
+     figures   - nothing from the title screen stays in the hall once a floor starts
+     softlock  - a "keyboard kid" (the autopilot's choices turned into screen-side key presses, plus random mashing)
+                 plays floors on EASY and NORMAL, 1 and 2 players: no error, nobody stuck in a hug, a stagger or a
+                 crouch, and every floor finished
+   Each check was run against the old code first and failed there (see the README). */
+(function () {
+  'use strict';
+  const Sim = window.KF_SIM, Bot = window.KF_BOT;
+  const DT = 1 / 60;
+  const game = () => window.game;
+  const KEYS1 = { left: 'KeyA', right: 'KeyD', down: 'KeyS', jump: 'KeyW', punch: 'KeyF', kick: 'KeyG', special: 'KeyH', call: 'KeyT' };
+  const KEYS2 = { left: 'ArrowLeft', right: 'ArrowRight', down: 'ArrowDown', jump: 'ArrowUp', punch: 'KeyK', kick: 'KeyL', special: 'KeyJ', call: 'Enter' };
+  // keys a kid might bash that the game doesn't use for fighting (never M, P, Esc or ?: those mute, pause and help)
+  const NOISE = ['KeyQ', 'KeyZ', 'KeyX', 'KeyC', 'KeyV', 'KeyB', 'Digit5', 'KeyU', 'KeyI', 'KeyO', 'KeyY', 'Backquote'];
+  const BASH = ['KeyF', 'KeyG', 'KeyH', 'KeyW', 'KeyK', 'KeyL', 'KeyJ', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Space'].concat(NOISE);
+
+  const held = new Set();
+  function fire(type, code) { window.dispatchEvent(new KeyboardEvent(type, { code, key: code, bubbles: true, cancelable: true })); }
+  function down(code) { fire('keydown', code); held.add(code); }
+  function up(code) { fire('keyup', code); held.delete(code); }
+  function tap(code) { fire('keydown', code); fire('keyup', code); }
+  function hold(code, on) { if (on && !held.has(code)) down(code); else if (!on && held.has(code)) up(code); }
+  function releaseAll() { for (const c of [...held]) up(c); }
+
+  const step = (s) => game().step(s);
+  const stepFast = (s) => game().step(s, { draw: false }); // the game skips drawing when it can
+  const W = () => game().world();
+  // where a brother's 3D model stands, left to right on screen (the camera looks straight down -z, so world x is screen x)
+  const sx = (slot) => (game().modelX ? game().modelX(slot) : W().dir * W().players[slot].u);
+  function quietRoom(o) {
+    game().start(Object.assign({ floor: 0, mode: '1p', hero: 'teddy', difficulty: 'easy' }, o));
+    step(1.6);
+    const w = W();
+    w.noSpawn = true; w.enemies = []; w.shots = []; w.pots = []; w.items = [];
+    // the middle of the hall, away from both ends
+    w.players.forEach((p, i) => { p.u = 20 + i * 1.2; });
+    w.cam = 20.6;
+    step(0.05);
+    return w;
+  }
+  const result = (name, ok, detail) => ({ name, ok: !!ok, detail: detail || '' });
+
+  // ---------------------------------------------------------------- → goes right, on every floor
+
+  function direction() {
+    const out = [];
+    for (let f = 0; f < 5; f++) {
+      for (const mode of ['1p', '2p']) {
+        const w = quietRoom({ floor: f, mode, difficulty: 'easy' });
+        const sides = mode === '2p' ? [0, 1] : [0];
+        for (const slot of sides) {
+          const K = mode === '2p' ? (slot ? KEYS2 : KEYS1) : KEYS1;
+          const alt = mode === '1p' ? KEYS2 : null;
+          for (const keys of alt ? [K, alt] : [K]) {
+            const x0 = sx(slot);
+            down(keys.right); step(0.5); up(keys.right); step(0.05);
+            const x1 = sx(slot);
+            const faceR = w.dir * w.players[slot].face > 0;
+            down(keys.left); step(0.5); up(keys.left); step(0.05);
+            const x2 = sx(slot);
+            const faceL = w.dir * w.players[slot].face < 0;
+            const ok = x1 > x0 + 1 && x2 < x1 - 1 && faceR && faceL;
+            out.push(result(`floor ${f + 1} ${mode} ${w.players[slot].id}: ${keys.right === 'KeyD' ? 'D / A' : '→ / ←'} move right / left on screen`, ok,
+              `screen x ${x0.toFixed(0)} → ${x1.toFixed(0)} → ${x2.toFixed(0)}, faces ${faceR ? 'right' : 'LEFT'} then ${faceL ? 'left' : 'RIGHT'}`));
+          }
+        }
+      }
+      // a punch and a low kick land on whoever stands to the right on screen
+      {
+        const w = quietRoom({ floor: f, mode: '1p', difficulty: 'easy' });
+        const p = w.players[0];
+        tap('ArrowRight'); step(0.05);
+        const hug = Sim.spawn(w, 'thrower', p.u + w.dir * 1.0, { state: 'cool', st: 9 });
+        tap('KeyF'); step(0.4);
+        const imp = Sim.spawn(w, 'imp', p.u + w.dir * 1.2, { hopT: 9 });
+        down('KeyS'); tap('KeyG'); step(0.4); up('KeyS'); step(0.05);
+        const ok = hug.hp < 2 && (imp.state === 'bonked' || imp.gone);
+        out.push(result(`floor ${f + 1}: after →, a punch and a low kick hit what's on the right`, ok, `thrower hp ${hug.hp}, imp ${imp.state}`));
+      }
+      // the GO arrow points the way the floor goes
+      {
+        const w = quietRoom({ floor: f, mode: '1p', difficulty: 'easy' });
+        w.players[0].u = 2;
+        step(0.05);
+        const go = document.getElementById('go');
+        const okGo = go.classList.contains(w.dir > 0 ? 'toR' : 'toL');
+        out.push(result(`floor ${f + 1}: the GO arrow points ${w.dir > 0 ? 'right' : 'left'}, the way the floor goes`, okGo, go.className));
+      }
+    }
+    // the touch d-pad: thumb on the right of the pad walks right on screen
+    for (const f of [0, 1]) {
+      const w = quietRoom({ floor: f, mode: '1p', difficulty: 'easy' });
+      const touch = document.getElementById('touch');
+      const wasHidden = touch.classList.contains('hidden');
+      touch.classList.remove('hidden');
+      const pad = touch.querySelector('.c0 .pad, .c0 .stick, [data-pad="0"], [data-stick="0"]');
+      const r = pad.getBoundingClientRect();
+      const ev = (type, x) => pad.dispatchEvent(new PointerEvent(type, { pointerId: 7, pointerType: 'touch', clientX: x, clientY: r.top + r.height / 2, bubbles: true, cancelable: true }));
+      const x0 = sx(0);
+      ev('pointerdown', r.right - 8); step(0.5); ev('pointerup', r.right - 8); step(0.05);
+      const x1 = sx(0);
+      ev('pointerdown', r.left + 8); step(0.5); ev('pointerup', r.left + 8); step(0.05);
+      const x2 = sx(0);
+      if (wasHidden) touch.classList.add('hidden');
+      out.push(result(`floor ${f + 1}: the touch d-pad's ▶ moves right and ◀ left on screen`, x1 > x0 + 1 && x2 < x1 - 1, `screen x ${x0.toFixed(0)} → ${x1.toFixed(0)} → ${x2.toFixed(0)}`));
+    }
+    releaseAll();
+    return out;
+  }
+
+  // ---------------------------------------------------------------- a hug always ends
+
+  function grab() {
+    const out = [];
+    const styles = {
+      'doing nothing': () => null,
+      'mashing keys the game doesn\'t use (Q Z X…)': (i) => (i % 15 === 0 ? NOISE[(i / 15) % NOISE.length] : null),
+      'mashing ← →': (i) => (i % 15 === 0 ? ((i / 15) % 2 ? 'ArrowLeft' : 'ArrowRight') : null),
+      'tapping the screen': (i) => (i % 15 === 0 ? 'tap' : null),
+    };
+    const LIMIT = { easy: { 'doing nothing': 1.7 }, normal: { 'doing nothing': 3.6 } };
+    for (const diff of ['easy', 'normal']) {
+      for (const n of [1, 2]) {
+        for (const [style, keyAt] of Object.entries(styles)) {
+          if (n === 2 && style !== 'mashing keys the game doesn\'t use (Q Z X…)' && style !== 'doing nothing') continue;
+          const w = quietRoom({ floor: 0, mode: '1p', difficulty: diff });
+          const p = w.players[0];
+          for (let i = 0; i < n; i++) Sim.spawn(w, 'hugger', p.u + (i ? -1.6 : 1.6));
+          let t = 0;
+          while (p.state !== 'grabbed' && t < 4) { step(DT); t += DT; }
+          step(0.25);
+          const grabbed = p.state === 'grabbed' || w.enemies.some((e) => e.state === 'hug');
+          const sign = !document.getElementById('wiggle').classList.contains('hidden');
+          const canvas = document.getElementById('game');
+          let i = 0, took = Infinity;
+          for (; i < 60 * 8; i++) {
+            const k = keyAt(i);
+            if (k === 'tap') {
+              const r = canvas.getBoundingClientRect();
+              const o = { pointerId: 9, pointerType: 'touch', clientX: r.left + r.width * 0.6, clientY: r.top + r.height * 0.5, bubbles: true, cancelable: true };
+              canvas.dispatchEvent(new PointerEvent('pointerdown', o)); canvas.dispatchEvent(new PointerEvent('pointerup', o));
+            } else if (k) tap(k);
+            step(DT);
+            if (p.state !== 'grabbed' && !w.enemies.some((e) => e.state === 'hug' && e.grab === 0)) { took = (i + 1) * DT + 0.25; break; }
+          }
+          const limit = (LIMIT[diff][style]) || (diff === 'easy' ? 1.2 : 2.2) + (n - 1) * 0.6;
+          const signOff = document.getElementById('wiggle').classList.contains('hidden') || p.state === 'grabbed';
+          const ok = grabbed && took <= limit && sign && !p.ko;
+          out.push(result(`${diff}: ${n} hugger${n > 1 ? 's' : ''}, ${style}: free within ${limit} s, WIGGLE FREE! sign showing`, ok && signOff,
+            `${grabbed ? '' : 'never grabbed, '}free after ${took === Infinity ? 'never (8 s)' : took.toFixed(2) + ' s'}, sign ${sign ? 'shown' : 'NOT shown'}, hp ${Math.round(p.hp)}`));
+        }
+      }
+    }
+    releaseAll();
+    return out;
+  }
+
+  // ---------------------------------------------------------------- 2 players: nobody stays down for ever
+
+  function ko() {
+    const w = quietRoom({ floor: 0, mode: '2p', difficulty: 'normal' });
+    const [a, b] = w.players;
+    b.u = a.u + 6;
+    Sim.hurt(w, b, 999, b.u + 1);
+    let t = 0;
+    while (b.ko && t < 20) { step(0.25); t += 0.25; }
+    return [result('2P: a knocked-out brother nobody helps gets up on his own within 12 s', !b.ko && t <= 12, b.ko ? 'still down after 20 s' : `up after ${t.toFixed(1)} s`)];
+  }
+
+  // ---------------------------------------------------------------- nothing left over from the title screen
+
+  function figures() {
+    const g = game();
+    const out = [];
+    const sc = g.scene;
+    if (!sc) return [result('figures: the game exposes its scene', false, 'no game.scene')];
+    const people = () => {
+      let n = 0;
+      for (const c of sc.children) {
+        if (!c.visible) continue;
+        let m = 0;
+        c.traverse((o) => { if (o.isMesh) m++; });
+        if (m >= 25 && m < 120) n++;
+      }
+      return n;
+    };
+    for (const mode of ['1p', '2p']) {
+      g.show('title'); step(0.2);
+      g.start({ floor: 0, mode, difficulty: 'easy' }); step(0.5);
+      const w = W();
+      const want = w.players.length + w.enemies.filter((e) => /hugger|thrower|boss|copy/.test(e.type) && e.state !== 'vanish').length;
+      const have = people();
+      out.push(result(`${mode}: after the title screen, only this floor's people are in the hall`, have === want, `${have} figures for ${want} people`));
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------- the keyboard kid: no soft-lock
+
+  function softlock(o) {
+    o = o || {};
+    const out = [];
+    const ALL = [[0, 'easy', '1p', 'tommy'], [1, 'easy', '1p', 'teddy'], [2, 'easy', '1p', 'tommy'], [3, 'easy', '1p', 'teddy'], [4, 'easy', '1p', 'tommy'],
+      [0, 'normal', '1p', 'teddy'], [1, 'normal', '1p', 'tommy'], [0, 'easy', '2p'], [1, 'normal', '2p'], [4, 'easy', '2p']];
+    const idx = o.runs ? o.runs : o.quick ? [0, 6, 7] : ALL.map((r, i) => i);
+    let seed = 0;
+    const EVERY = 3; // the kid decides every 3 frames (a 20-a-second kid)
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    for (const ri of idx) {
+      const [f, diff, mode, hero] = ALL[ri];
+      seed = (o.seed || 12345) + ri * 7919; // each run replays on its own: softlock({ seed, runs: [ri] })
+      const worldSeed = 1 + Math.floor(rnd() * 1e8);
+      game().start({ floor: f, mode, hero, difficulty: diff, seed: worldSeed });
+      const w = W();
+      const mems = w.players.map(() => ({ opts: { call: mode === '1p', callEvery: 15 } }));
+      const errs = [];
+      const onErr = (e) => errs.push(e.message);
+      window.addEventListener('error', onErr);
+      const since = w.players.map(() => ({ state: '', t: 0 }));
+      const problems = [];
+      let t = 0, noise = null, noiseT = 0, crouchStuck = 0, nextTrace = 0;
+      const trace = [];
+      const LIMIT = 300;
+      while (t < LIMIT && (w.phase === 'intro' || w.phase === 'play' || w.phase === 'clear')) {
+        // what the autopilot would do, turned into the keys on that side of the screen
+        w.players.forEach((p, i) => {
+          const K = mode === '2p' ? (i ? KEYS2 : KEYS1) : KEYS1;
+          const inp = Bot.bot(w, p, mems[i]);
+          let right = w.dir > 0 ? inp.r : inp.l, left = w.dir > 0 ? inp.l : inp.r, dn = !!inp.down;
+          if (noise && noise.slot === i) { right = noise.dir === 'r'; left = noise.dir === 'l'; dn = noise.dir === 'd'; }
+          hold(K.right, !!right); hold(K.left, !!left); hold(K.down, dn);
+          for (const a of ['jump', 'punch', 'kick', 'special', 'call']) if (inp[a]) tap(K[a]);
+        });
+        // and a kid bashing keys
+        if (rnd() < 0.15) tap(BASH[Math.floor(rnd() * BASH.length)]);
+        if (!noise && rnd() < 0.024) { noise = { slot: Math.floor(rnd() * w.players.length), dir: 'lrd'[Math.floor(rnd() * 3)] }; noiseT = 0.2 + rnd() * 0.4; }
+        if (noise && (noiseT -= DT * EVERY) <= 0) noise = null;
+        try { stepFast(DT * EVERY); } catch (e) { errs.push(e.message); break; }
+        t += DT * EVERY;
+        if (t >= nextTrace) {
+          nextTrace += 30;
+          const p = w.players[0];
+          trace.push(`t${t.toFixed(0)} u${p.u.toFixed(0)} ${p.state} hp${Math.round(p.hp)} lives${w.lives}${w.D.timer ? ' time' + Math.round(w.time) : ''} [${w.enemies.map((e) => e.type + ':' + e.state + '@' + (e.u - p.u).toFixed(0)).join(' ')}]`);
+        }
+        w.players.forEach((p, i) => {
+          const s = since[i];
+          if (p.state !== s.state) { s.state = p.state; s.t = 0; } else s.t += DT * EVERY;
+          const cap = { grabbed: w.D.grabMax + 0.6, hurt: 1.5, getup: 2.5, highfive: 1.5, ko: mode === '2p' ? 13 : 3 }[p.state];
+          if (cap && s.t > cap && problems.length < 3) problems.push(`${p.id} stuck '${p.state}' for ${s.t.toFixed(1)} s at t=${t.toFixed(0)}`);
+          const K = mode === '2p' ? (i ? KEYS2 : KEYS1) : KEYS1;
+          if (p.crouch && p.state === 'crouch' && !p.move && !held.has(K.down) && !(mode === '1p' && held.has(KEYS2.down))) crouchStuck += DT * EVERY; else crouchStuck = 0;
+          if (crouchStuck > 0.4 && problems.length < 3) { problems.push(`${p.id} stuck crouching with no key down at t=${t.toFixed(1)} (phase ${w.phase}, y ${p.y.toFixed(2)}, boss ${w.boss ? w.boss.state : '-'})`); crouchStuck = -1e9; }
+        });
+        if (problems.length >= 3) break;
+      }
+      releaseAll();
+      window.removeEventListener('error', onErr);
+      const done = w.phase === 'done' || w.phase === 'clear';
+      if (!done) problems.push(w.phase === 'over' ? 'game over' : `not finished after ${t.toFixed(0)} s (got to ${Math.max(...w.players.map((p) => p.u)).toFixed(0)} of ${w.L} m)`);
+      if (problems.length) problems.push('trace: ' + trace.slice(-5).join(' | '));
+      if (errs.length) problems.unshift(`error: ${errs[0]}`);
+      if (problems.length) problems.push(`replay: KF_PLAYCHECK.softlock({ seed: ${o.seed || 12345}, runs: [${ri}] })`);
+      out.push(result(`keyboard kid, ${diff} floor ${f + 1} ${mode}${hero ? ' ' + hero : ''}: finished, never stuck`, problems.length === 0, problems.length ? problems.join('; ') : `${t.toFixed(0)} s, ${w.bonks} bonks, lives ${w.lives}`));
+    }
+    return out;
+  }
+
+  function playCheck(o) {
+    o = o || {};
+    const g = game();
+    const auto = g.autoPause;
+    g.autoPause = false;
+    if (g.autoplay) g.autoplay(false);
+    const t0 = performance.now();
+    const groups = { direction: direction(), grab: grab(), ko: ko(), figures: figures(), softlock: softlock(o) };
+    g.autoPause = auto;
+    let pass = 0, fail = 0;
+    const failures = [];
+    for (const k in groups) for (const r of groups[k]) { if (r.ok) pass++; else { fail++; failures.push(`${k}: ${r.name} — ${r.detail}`); } }
+    g.show('title');
+    return { ok: fail === 0, pass, fail, failures, seconds: +((performance.now() - t0) / 1000).toFixed(1), groups };
+  }
+
+  window.KF_PLAYCHECK = { playCheck, direction, grab, ko, figures, softlock };
+  if (window.game) window.game.playCheck = playCheck;
 })();
 
 </script>
@@ -5868,7 +6237,7 @@ Kit.sound.setup({ button: { top: 'var(--ks-top)' } });
     'LEVEL': '难度', '🐣 EASY': '🐣 简单', '🔥 NORMAL': '🔥 普通', '↻ PLAY AGAIN': '↻ 再玩一次', 'Enter: play again · Esc: menu': '回车：再玩一次 · Esc：菜单',
     'LOADING…': '加载中…', '↻ Turn sideways for a bigger temple!': '↻ 横过来玩，寺庙更大！',
     // the HUD
-    'POWER!': '超级力量！', 'CALL': '叫', 'HIGH FIVE!': '击掌！', 'BOSS': '大王', 'WIGGLE FREE!': '扭一扭，挣脱！', 'press any button, fast!': '快快按任意键！',
+    'POWER!': '超级力量！', 'CALL': '叫', 'HIGH FIVE!': '击掌！', 'BOSS': '大王', 'WIGGLE FREE!': '扭一扭，挣脱！', 'press any key or tap, fast!': '快快按任意键或点屏幕！',
     'JUMP': '跳', 'DUCK': '蹲下', 'SPECIAL': '绝招', 'KICK': '踢腿', 'PUNCH': '出拳', 'Special': '绝招',
     'GO': '出发', '⬅ GO': '⬅ 出发', 'GO ➡': '出发 ➡',
     'Pause (P)': '暂停 (P)', 'Sound (M)': '声音 (M)', 'Call your brother (T)': '叫兄弟 (T)', 'High five (T or Enter)': '击掌 (T 或 回车)',
@@ -5896,6 +6265,7 @@ Kit.sound.setup({ button: { top: 'var(--ks-top)' } });
   L.rule(/^(.+) gives up!$/, (m, n) => `${BOSS[n] || n}认输啦！`);
   L.rule(/^HELP (TEDDY|TOMMY) UP!$/, '快去扶 $1 起来！');
   L.rule(/^(TEDDY|TOMMY) HELPED (TEDDY|TOMMY) UP!$/, '$1 把 $2 扶起来啦！');
+  L.rule(/^(TEDDY|TOMMY) IS BACK UP!$/, '$1 自己站起来啦！');
   L.rule(/^(TEDDY|TOMMY) SAYS: HI-YAH!$/, '$1 说：嘿呀！');
   L.rule(/^(\S+) (ICE CREAM|WATER|JUICE BOX|COOKIE|WATERMELON|BANANA|DUMPLING|TREAT) FROM (TEDDY|TOMMY)!$/, (m, e, item, who) => `${e} ${who} 送来的${TREAT[item]}！`);
 })();
