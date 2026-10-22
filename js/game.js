@@ -899,6 +899,9 @@
     },
     quiet() { bannerUntil = 1e-6; for (const t of toasts) t.until = 0; updateHud(0); },
     world: () => W,
+    scene,
+    // where a brother's model stands, in world x (= left to right on screen)
+    modelX(slot) { const v = views.get('p' + slot); if (!v) return NaN; v.p.root.updateWorldMatrix(true, false); return new T.Vector3().setFromMatrixPosition(v.p.root.matrixWorld).x; },
     save: () => save,
     calm(v = true) { document.body.classList.toggle('calm', !!v); },
     renderer,
