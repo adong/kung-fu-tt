@@ -219,9 +219,10 @@
       const [a, b] = W.players;
       b.u = a.u + 5;
       Sim.hurt(W, b, 999, b.u + 1);
+      const lives = W.lives, t0 = W.t;
       const t = seen(W, 20, [], 'revive');
-      const ok = t < 0 && b.ko;
-      out.push({ name: '2P: nobody comes to help → he stays down (revive needs the brother)', ok, problems: ok ? [] : ['got up on his own'] });
+      const ok = t > 0 && t - t0 >= Sim.SELF_UP - 0.1 && t - t0 <= Sim.SELF_UP + 0.5 && !b.ko && W.lives === lives;
+      out.push({ name: `2P: nobody comes to help → he gets up on his own after ${Sim.SELF_UP} s (never stuck, no life lost)`, ok, took: t > 0 ? +(t - t0).toFixed(1) : null, problems: ok ? [] : [`revive at ${t > 0 ? (t - t0).toFixed(1) : 'never'}, ko ${b.ko}, lives ${W.lives}`] });
     }
     {
       const W = room({ difficulty: 'normal', mode: '2p' });

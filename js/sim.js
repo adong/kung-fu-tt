@@ -16,11 +16,11 @@
   // 🔥 NORMAL is for Teddy (8): the classic pace and a relaxed timer.
   const DIFF = {
     easy: {
-      lives: 5, timer: 0, speed: 0.62, gap: [3.0, 4.6], max: 3, take: 0.5, mash: 4, grabMax: 2.4, drain: 5, drainFloor: 15,
+      lives: 5, timer: 0, speed: 0.62, gap: [3.0, 4.6], max: 3, take: 0.5, mash: 3, grabMax: 1.5, drain: 5, drainFloor: 15,
       drop: 0.45, bossHp: 0.55, tele: 1.55, shot: 0.68, bossDmg: 0.5, spec: 0.6, lenK: 0.8, revive: 70, startFood: true,
     },
     normal: {
-      lives: 3, timer: 180, speed: 1, gap: [1.1, 2.1], max: 5, take: 1, mash: 7, grabMax: 4.5, drain: 9, drainFloor: 0,
+      lives: 3, timer: 180, speed: 1, gap: [1.5, 2.6], max: 4, take: 1, mash: 6, grabMax: 3.0, drain: 9, drainFloor: 0,
       drop: 0.12, bossHp: 1, tele: 1, shot: 1, bossDmg: 1, spec: 1, lenK: 1, revive: 50, startFood: false,
     },
   };
@@ -39,6 +39,7 @@
     ywave: { len: 40, waveAt: 12, special: true },
   };
   const SPECIAL = { teddy: 'combo', tommy: 'ywave' };
+  const SELF_UP = 8; // 2 players: seconds before a knocked-out brother nobody helps gets up by himself
   const SPEC_CD = { combo: 5, ywave: 6 };
 
   const DEF = {
@@ -343,14 +344,15 @@
     if (p && p.state === 'grabbed' && huggersOn(W, p).length === 0) { p.state = 'idle'; p.noGrab = 0.8; }
   }
 
-  // how: 'free' (wiggled out: they get dizzy), 'drop' (just let go)
+  // how: 'free' (wiggled out) or 'tired' (held too long): they stagger off dizzy; 'drop' (hit, knocked out): they let go
   function releaseHuggers(W, p, how) {
+    const off = how === 'free' || how === 'tired';
     for (const e of W.enemies) {
       if (e.grab !== p.slot) continue;
       e.grab = null;
-      if (e.state === 'hug') { e.state = 'dizzy'; e.st = how === 'free' ? 1.4 : 0.8; e.vu = sgn(e.u - p.u) * 3; }
+      if (e.state === 'hug') { e.state = 'dizzy'; e.st = off ? 1.6 : 0.8; e.vu = sgn(e.u - p.u) * (off ? 4.5 : 3); e.hugT = 0; }
     }
-    if (p.state === 'grabbed') { p.state = 'idle'; p.noGrab = 0.9; p.wiggle = 0; }
+    if (p.state === 'grabbed') { p.state = 'idle'; p.noGrab = off ? 1.5 : 0.9; p.wiggle = 0; p.grabT = 0; }
   }
 
   function stepGrabs(W) {
@@ -367,12 +369,13 @@
         ev(W, 'free', { p: p.slot, u: p.u });
         continue;
       }
-      // a hug can't last for ever: a tired hugger lets go
-      for (const e of hs) {
-        e.hugT += DT;
-        if (e.hugT >= W.D.grabMax) { e.grab = null; e.state = 'dizzy'; e.st = 1.0; e.vu = sgn(e.u - p.u) * 2; ev(W, 'tired', { u: e.u, id: e.id }); }
+      // a hug never lasts long: after grabMax (1.5 s on EASY) every hugger on you gets tired and lets go
+      for (const e of hs) e.hugT += DT;
+      if (p.grabT >= W.D.grabMax) {
+        for (const e of hs) ev(W, 'tired', { u: e.u, id: e.id });
+        releaseHuggers(W, p, 'tired');
+        ev(W, 'free', { p: p.slot, u: p.u, tired: true });
       }
-      if (!huggersOn(W, p).length) { p.state = 'idle'; p.noGrab = 0.9; p.wiggle = 0; ev(W, 'free', { p: p.slot, u: p.u, tired: true }); }
     }
   }
 
@@ -1072,8 +1075,13 @@
       if (Math.min(...downs.map((p) => p.koT)) > 1.5) loseLife(W, 'ko');
       return;
     }
-    // 2 players: the other brother helps him up
+    // 2 players: the other brother helps him up, and if nobody comes he gets up on his own after a while
     for (const p of downs) {
+      if (p.koT >= SELF_UP) {
+        p.ko = false; p.state = 'getup'; p.st = 0.8; p.hp = W.D.revive; p.inv = 2.2; p.reviveT = 0;
+        ev(W, 'revive', { p: p.slot, by: p.slot, self: true, u: p.u });
+        continue;
+      }
       const helper = W.players.find((q) => q !== p && !q.ko && q.state !== 'grabbed' && Math.abs(q.u - p.u) < 1.3 && q.y < 0.2);
       if (helper) p.reviveT += DT; else p.reviveT = Math.max(0, p.reviveT - DT * 0.5);
       if (p.reviveT >= 0.8) {
@@ -1099,6 +1107,8 @@
     if (W.phase === 'clear') {
       for (const p of W.players) {
         if (p.ko) { p.ko = false; p.hp = Math.max(p.hp, 30); }
+        // the boss is down: stand up straight and wait for the celebration
+        if (p.state === 'crouch' || p.state === 'walk' || p.state === 'grabbed') { p.state = 'idle'; p.crouch = false; p.move = null; }
         if (p.y > 0 || p.vy > 0) airborne(W, p);
         if (W.pt >= 1.0 && p.state !== 'celebrate') { p.state = 'celebrate'; p.st = 99; p.move = null; p.face = W.mode === '2p' ? sgn(W.players[1 - p.slot].u - p.u) : 1; ev(W, 'celebrate', { p: p.slot, who: p.id }); }
       }
@@ -1149,7 +1159,7 @@
   }
 
   root.KF_SIM = {
-    DT, DIFF, MOVES, DEF, BOSSES, SPECIAL, SPEC_CD, FOOD, TREATS, STAND_H, CROUCH_H, WALK, JUMP_V, GRAV,
+    DT, DIFF, MOVES, DEF, BOSSES, SPECIAL, SPEC_CD, SELF_UP, FOOD, TREATS, STAND_H, CROUCH_H, WALK, JUMP_V, GRAV,
     create, step, call, enterArena, hurt, knockOut, loseLife, spawn, spawnBoss, huggersOn, nearestPlayer, minPlayerDist, arenaLo, bodyTop, bodyBot, hittable,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

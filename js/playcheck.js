@@ -30,6 +30,7 @@
   function releaseAll() { for (const c of [...held]) up(c); }
 
   const step = (s) => game().step(s);
+  const stepFast = (s) => game().step(s, { draw: false }); // the game skips drawing when it can
   const W = () => game().world();
   // where a brother's 3D model stands, left to right on screen (the camera looks straight down -z, so world x is screen x)
   const sx = (slot) => (game().modelX ? game().modelX(slot) : W().dir * W().players[slot].u);
@@ -38,6 +39,9 @@
     step(1.6);
     const w = W();
     w.noSpawn = true; w.enemies = []; w.shots = []; w.pots = []; w.items = [];
+    // the middle of the hall, away from both ends
+    w.players.forEach((p, i) => { p.u = 20 + i * 1.2; });
+    w.cam = 20.6;
     step(0.05);
     return w;
   }
@@ -203,14 +207,17 @@
   function softlock(o) {
     o = o || {};
     const out = [];
-    const runs = o.quick
-      ? [[0, 'easy', '1p', 'tommy'], [1, 'normal', '1p', 'teddy'], [0, 'easy', '2p']]
-      : [[0, 'easy', '1p', 'tommy'], [1, 'easy', '1p', 'teddy'], [2, 'easy', '1p', 'tommy'], [3, 'easy', '1p', 'teddy'], [4, 'easy', '1p', 'tommy'],
-        [0, 'normal', '1p', 'teddy'], [1, 'normal', '1p', 'tommy'], [0, 'easy', '2p'], [1, 'normal', '2p'], [4, 'easy', '2p']];
-    let seed = 12345;
+    const ALL = [[0, 'easy', '1p', 'tommy'], [1, 'easy', '1p', 'teddy'], [2, 'easy', '1p', 'tommy'], [3, 'easy', '1p', 'teddy'], [4, 'easy', '1p', 'tommy'],
+      [0, 'normal', '1p', 'teddy'], [1, 'normal', '1p', 'tommy'], [0, 'easy', '2p'], [1, 'normal', '2p'], [4, 'easy', '2p']];
+    const idx = o.runs ? o.runs : o.quick ? [0, 6, 7] : ALL.map((r, i) => i);
+    let seed = 0;
+    const EVERY = 3; // the kid decides every 3 frames (a 20-a-second kid)
     const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
-    for (const [f, diff, mode, hero] of runs) {
-      game().start({ floor: f, mode, hero, difficulty: diff });
+    for (const ri of idx) {
+      const [f, diff, mode, hero] = ALL[ri];
+      seed = (o.seed || 12345) + ri * 7919; // each run replays on its own: softlock({ seed, runs: [ri] })
+      const worldSeed = 1 + Math.floor(rnd() * 1e8);
+      game().start({ floor: f, mode, hero, difficulty: diff, seed: worldSeed });
       const w = W();
       const mems = w.players.map(() => ({ opts: { call: mode === '1p', callEvery: 15 } }));
       const errs = [];
@@ -218,7 +225,8 @@
       window.addEventListener('error', onErr);
       const since = w.players.map(() => ({ state: '', t: 0 }));
       const problems = [];
-      let t = 0, noise = null, noiseT = 0, crouchStuck = 0;
+      let t = 0, noise = null, noiseT = 0, crouchStuck = 0, nextTrace = 0;
+      const trace = [];
       const LIMIT = 300;
       while (t < LIMIT && (w.phase === 'intro' || w.phase === 'play' || w.phase === 'clear')) {
         // what the autopilot would do, turned into the keys on that side of the screen
@@ -231,19 +239,24 @@
           for (const a of ['jump', 'punch', 'kick', 'special', 'call']) if (inp[a]) tap(K[a]);
         });
         // and a kid bashing keys
-        if (rnd() < 0.05) tap(BASH[Math.floor(rnd() * BASH.length)]);
-        if (!noise && rnd() < 0.008) { noise = { slot: Math.floor(rnd() * w.players.length), dir: 'lrd'[Math.floor(rnd() * 3)] }; noiseT = 0.2 + rnd() * 0.4; }
-        if (noise && (noiseT -= DT) <= 0) noise = null;
-        try { step(DT); } catch (e) { errs.push(e.message); break; }
-        t += DT;
+        if (rnd() < 0.15) tap(BASH[Math.floor(rnd() * BASH.length)]);
+        if (!noise && rnd() < 0.024) { noise = { slot: Math.floor(rnd() * w.players.length), dir: 'lrd'[Math.floor(rnd() * 3)] }; noiseT = 0.2 + rnd() * 0.4; }
+        if (noise && (noiseT -= DT * EVERY) <= 0) noise = null;
+        try { stepFast(DT * EVERY); } catch (e) { errs.push(e.message); break; }
+        t += DT * EVERY;
+        if (t >= nextTrace) {
+          nextTrace += 30;
+          const p = w.players[0];
+          trace.push(`t${t.toFixed(0)} u${p.u.toFixed(0)} ${p.state} hp${Math.round(p.hp)} lives${w.lives}${w.D.timer ? ' time' + Math.round(w.time) : ''} [${w.enemies.map((e) => e.type + ':' + e.state + '@' + (e.u - p.u).toFixed(0)).join(' ')}]`);
+        }
         w.players.forEach((p, i) => {
           const s = since[i];
-          if (p.state !== s.state) { s.state = p.state; s.t = 0; } else s.t += DT;
+          if (p.state !== s.state) { s.state = p.state; s.t = 0; } else s.t += DT * EVERY;
           const cap = { grabbed: w.D.grabMax + 0.6, hurt: 1.5, getup: 2.5, highfive: 1.5, ko: mode === '2p' ? 13 : 3 }[p.state];
           if (cap && s.t > cap && problems.length < 3) problems.push(`${p.id} stuck '${p.state}' for ${s.t.toFixed(1)} s at t=${t.toFixed(0)}`);
           const K = mode === '2p' ? (i ? KEYS2 : KEYS1) : KEYS1;
-          if (p.crouch && p.state === 'crouch' && !held.has(K.down) && !(mode === '1p' && held.has(KEYS2.down))) crouchStuck += DT; else crouchStuck = 0;
-          if (crouchStuck > 0.4 && problems.length < 3) { problems.push(`${p.id} stuck crouching with no key down`); crouchStuck = -1e9; }
+          if (p.crouch && p.state === 'crouch' && !p.move && !held.has(K.down) && !(mode === '1p' && held.has(KEYS2.down))) crouchStuck += DT * EVERY; else crouchStuck = 0;
+          if (crouchStuck > 0.4 && problems.length < 3) { problems.push(`${p.id} stuck crouching with no key down at t=${t.toFixed(1)} (phase ${w.phase}, y ${p.y.toFixed(2)}, boss ${w.boss ? w.boss.state : '-'})`); crouchStuck = -1e9; }
         });
         if (problems.length >= 3) break;
       }
@@ -251,7 +264,9 @@
       window.removeEventListener('error', onErr);
       const done = w.phase === 'done' || w.phase === 'clear';
       if (!done) problems.push(w.phase === 'over' ? 'game over' : `not finished after ${t.toFixed(0)} s (got to ${Math.max(...w.players.map((p) => p.u)).toFixed(0)} of ${w.L} m)`);
+      if (problems.length) problems.push('trace: ' + trace.slice(-5).join(' | '));
       if (errs.length) problems.unshift(`error: ${errs[0]}`);
+      if (problems.length) problems.push(`replay: KF_PLAYCHECK.softlock({ seed: ${o.seed || 12345}, runs: [${ri}] })`);
       out.push(result(`keyboard kid, ${diff} floor ${f + 1} ${mode}${hero ? ' ' + hero : ''}: finished, never stuck`, problems.length === 0, problems.length ? problems.join('; ') : `${t.toFixed(0)} s, ${w.bonks} bonks, lives ${w.lives}`));
     }
     return out;

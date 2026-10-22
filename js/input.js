@@ -1,6 +1,8 @@
 /* Kung Fu TT: controls. The keyboard for one or two brothers, and an on-screen d-pad with PUNCH, KICK and SPECIAL
    buttons for touch. Presses are latched until the game reads them, so a tap shorter than a frame still counts, and
-   every fresh press also counts as a wiggle when a hugger has you.
+   every fresh press counts as a wiggle when a hugger has you: any key at all (even ones the game doesn't use), and a
+   tap anywhere on the screen (js/game.js calls mashAll).
+   The keys are as they look on screen: → always walks right. js/game.js turns that into the rules' direction.
      Teddy (player 1): A D walk, W jump, S crouch, F punch, G kick, H special, T call / high five
      Tommy (player 2): ← → walk, ↑ jump, ↓ crouch, K punch, L kick, J special, Enter call / high five
    In 1 player both sets drive you, and Space jumps too. */
@@ -24,14 +26,19 @@
 
   const sideOf = (s) => (twoPlayer ? s : 0);
 
+  const NOT_A_WIGGLE = /^(Shift|Control|Alt|Meta|CapsLock|Tab|Fn|OS)/;
   function onKey(e, down) {
     if (e.metaKey || e.ctrlKey || e.altKey) return false;
     const m = KEYS[e.code];
-    if (!m) return false;
+    if (!m) {
+      // any other key still wiggles you free from a hug
+      if (down && !e.repeat && !NOT_A_WIGGLE.test(e.code || '')) mashAll();
+      return false;
+    }
     if (e.code === 'Space' && twoPlayer) return false;
     const side = sideOf(m[0]), act = m[1];
     if (down) {
-      if (!e.repeat) { mash[side]++; if (!HELD[act]) latched[side][act] = true; }
+      if (!e.repeat) { mash[side]++; latched[side][act] = true; } // a tap shorter than a frame still turns you round
       if (HELD[act]) held[side][e.code] = act;
     } else delete held[side][e.code];
     return true;
@@ -57,7 +64,7 @@
     const h = held[s], l = latched[s], pd = pads[s];
     const has = (a) => { for (const k in h) if (h[k] === a) return true; return false; };
     const o = {
-      l: has('l') || pd.l, r: has('r') || pd.r, down: has('down') || pd.down,
+      l: has('l') || pd.l || !!l.l, r: has('r') || pd.r || !!l.r, down: has('down') || pd.down || !!l.down,
       jump: !!l.jump, punch: !!l.punch, kick: !!l.kick, special: !!l.special, call: !!l.call, mash: mash[s],
     };
     for (const k in l) delete l[k];
@@ -66,6 +73,7 @@
   }
 
   function press(s, act) { latched[s][act] = true; mash[s]++; }
+  function mashAll() { mash[0]++; mash[1]++; }
 
   // ---------------------------------------------------------------- touch
 
@@ -113,7 +121,7 @@
   }
 
   window.KF_INPUT = {
-    read, press, clear, bindTouch,
+    read, press, mashAll, clear, bindTouch,
     setTwoPlayer(v) { twoPlayer = !!v; clear(); },
   };
 })();

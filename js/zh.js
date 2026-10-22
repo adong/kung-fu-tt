@@ -64,6 +64,7 @@
   L.rule(/^(.+) gives up!$/, (m, n) => `${BOSS[n] || n}认输啦！`);
   L.rule(/^HELP (TEDDY|TOMMY) UP!$/, '快去扶 $1 起来！');
   L.rule(/^(TEDDY|TOMMY) HELPED (TEDDY|TOMMY) UP!$/, '$1 把 $2 扶起来啦！');
+  L.rule(/^(TEDDY|TOMMY) IS BACK UP!$/, '$1 自己站起来啦！');
   L.rule(/^(TEDDY|TOMMY) SAYS: HI-YAH!$/, '$1 说：嘿呀！');
   L.rule(/^(\S+) (ICE CREAM|WATER|JUICE BOX|COOKIE|WATERMELON|BANANA|DUMPLING|TREAT) FROM (TEDDY|TOMMY)!$/, (m, e, item, who) => `${e} ${who} 送来的${TREAT[item]}！`);
 })();

@@ -355,7 +355,7 @@
           Sfx.ko();
           if (W.mode === '2p' && W.players.some((p) => !p.ko)) toast(`HELP ${who(ev.p)} UP!`, 'warn');
           break;
-        case 'revive': Fx.burst('UP YOU GET!', d * ev.u, 2.4, 0.4, true); Sfx.revive(); toast(`${who(ev.by)} HELPED ${who(ev.p)} UP!`, 'save'); break;
+        case 'revive': Fx.burst('UP YOU GET!', d * ev.u, 2.4, 0.4, true); Sfx.revive(); toast(ev.self ? `${who(ev.p)} IS BACK UP!` : `${who(ev.by)} HELPED ${who(ev.p)} UP!`, 'save'); break;
         case 'life':
           if (ev.lives > 0) { toast(ev.why === 'time' ? "TIME'S UP! ❤️ -1" : '❤️ -1', 'warn'); }
           break;
@@ -582,7 +582,13 @@
     document.body.classList.toggle('two', mode === '2p');
   }
 
+  function clearDemo() {
+    if (demo && demo.views) for (const v of demo.views) disposeObj(v.root);
+    demo = null;
+  }
+
   function buildDemo() {
+    clearDemo();
     clearViews();
     if (hall) { hall.dispose(); hall = null; }
     W = null;
@@ -652,17 +658,17 @@
   }
 
   // carry: { score, lives } from the floor below
-  function startFloor(fi, carry) {
+  function startFloor(fi, carry, seed) {
+    clearDemo();
     clearViews();
     if (hall) { hall.dispose(); hall = null; }
-    demo = null;
     pandaCheer = false;
     celebrateT = 0;
     endT = -1; endKind = null;
     acc = 0;
     Input.setTwoPlayer(mode === '2p');
     Input.clear();
-    W = Sim.create({ floor: fi, difficulty: save.diff, mode, hero: save.hero, seed: (Math.random() * 1e9) | 0, halfW: viewHalfW(), score: carry.score || 0, lives: carry.lives });
+    W = Sim.create({ floor: fi, difficulty: save.diff, mode, hero: save.hero, seed: seed || ((Math.random() * 1e9) | 0), halfW: viewHalfW(), score: carry.score || 0, lives: carry.lives });
     floorScore = W.score;
     hall = Scene.build(scene, W);
     lag[0] = lag[1] = 1; bossLag.v = 1;
@@ -701,7 +707,7 @@
 
   function pause(on) {
     if (on && screen === 'play') { showScreen('pause'); Kit.sound.music('pause'); Input.clear(); }
-    else if (!on && screen === 'pause') { showScreen('play'); Kit.sound.music('play'); }
+    else if (!on && screen === 'pause') { Input.clear(); showScreen('play'); Kit.sound.music('play'); }
   }
 
   function showOver() {
@@ -724,16 +730,26 @@
 
   // ---------------------------------------------------------------- the loop
 
+  // A kid's keys are screen keys: → means walk right on screen. The rules count `u` along the hall, which runs leftwards
+  // on floors 1, 3 and 5 (x = dir * u), so there left and right swap on the way in. The autopilot already thinks in u.
+  function humanInput(i) {
+    const inp = Input.read(i);
+    if (W.dir < 0) { const l = inp.l; inp.l = inp.r; inp.r = l; }
+    return inp;
+  }
   function stepSim() {
-    const inputs = W.players.map((P, i) => (autoplay ? Bot.bot(W, P, botMem[i] || (botMem[i] = { opts: { call: W.mode === '1p', callEvery: 14 } })) : Input.read(i)));
+    const inputs = W.players.map((P, i) => (autoplay ? Bot.bot(W, P, botMem[i] || (botMem[i] = { opts: { call: W.mode === '1p', callEvery: 14 } })) : humanInput(i)));
     Sim.step(W, inputs);
     handleEvents();
   }
   const botMem = [];
 
+  let helpWas = false;
   function tick(dt) {
     clock += dt;
     resize();
+    const helpNow = !!(Kit.help && Kit.help.isOpen && Kit.help.isOpen());
+    if (helpNow !== helpWas) { helpWas = helpNow; Input.clear(); }
     if (W && screen === 'play') {
       acc += dt;
       let n = 0;
@@ -840,6 +856,8 @@
     }
   });
 
+  canvas.addEventListener('pointerdown', () => { if (screen === 'play') Input.mashAll(); });
+  $('wiggle').addEventListener('pointerdown', (e) => { e.preventDefault(); Input.mashAll(); });
   window.addEventListener('pointerdown', (e) => {
     gesture();
     if (e.pointerType === 'touch' && !touchMode) { touchMode = true; document.body.classList.add('touch'); showTouch(); }
@@ -862,15 +880,15 @@
       if (o.hero) save.hero = o.hero;
       if (o.difficulty) save.diff = o.difficulty;
       api.autoPause = false;
-      startFloor(o.floor || 0, { score: o.score || 0, lives: o.lives });
+      startFloor(o.floor || 0, { score: o.score || 0, lives: o.lives }, o.seed);
       return api.state();
     },
     // advance by `seconds` right now and draw (the Browser pane throttles hidden frames)
-    step(seconds = 1 / 60) {
+    step(seconds = 1 / 60, o) {
       const n = Math.max(1, Math.round(seconds * 60));
       for (let i = 0; i < n; i++) tick(1 / 60);
-      renderer.render(scene, camera);
-      return api.state();
+      if (!(o && o.draw === false)) renderer.render(scene, camera);
+      return o && o.draw === false ? null : api.state();
     },
     hold(v = true) { held = !!v; return held; },
     autoplay(v = true) { autoplay = !!v; botMem.length = 0; return autoplay; },
