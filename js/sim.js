@@ -109,7 +109,7 @@
     const a = 12, b = W.camA - halfW - 3;
     for (let i = 0; i < n; i++) {
       const u = a + ((i + 0.5) / n) * (b - a) + (W.rnd() - 0.5) * 3;
-      W.pots.push({ id: W.nextId++, u, y: 4.7, vy: 0, state: 'hang', st: 0, kind: W.rnd() < 0.5 ? 'dragon' : 'confetti' });
+      W.pots.push({ id: W.nextId++, u, y: 2.9, vy: 0, state: 'hang', st: 0, kind: W.rnd() < 0.5 ? 'dragon' : 'confetti' });
     }
     if (D.startFood) for (const f of [0.3, 0.62]) W.items.push({ id: W.nextId++, u: f * W.camA, y: 0, kind: f < 0.5 ? 'dumpling' : 'bun', emoji: f < 0.5 ? '🥟' : '🍞', heal: f < 0.5 ? 20 : 35, t: 0, life: Infinity });
     return W;
@@ -731,7 +731,7 @@
       case 'bao':
         if (W.shots.some((s) => s.by === b.id)) return { wait: 0.3 };
         if (dist < 1.8) return { name: 'shove', tele: 0.45 * T, act: 0.15, rec: 0.35, then: 'hop' };
-        if (dist < 3.6) return roomBehind(W, b, p) ? { hop: true } : { name: 'shove', tele: 0.45 * T, act: 0.15, rec: 0.35 };
+        if (dist < 3.6 && roomBehind(W, b, p)) return { hop: true }; // back to the stairs: no room to hop, so throw
         if (dist > 6.8) return { walk: 5.0, max: 1.4 };
         return { name: 'boomer', band: band(), tele: 0.6 * T, act: 0.2, rec: 0.2 };
       case 'belly':

@@ -219,7 +219,7 @@
   }
 
   function shadow() {
-    const m = new T.Mesh(new T.CircleGeometry(0.42, 20), new T.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.22, depthWrite: false }));
+    const m = new T.Mesh(new T.CircleGeometry(0.42, 20), new T.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.14, depthWrite: false }));
     m.rotation.x = -Math.PI / 2;
     m.position.y = 0.012;
     return m;

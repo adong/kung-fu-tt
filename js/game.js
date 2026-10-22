@@ -26,20 +26,31 @@
   const canvas = $('game');
   const renderer = new T.WebGLRenderer({ canvas, antialias: true });
   renderer.outputEncoding = T.sRGBEncoding;
-  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  // crisp: draw at least 1.5x on a 1x screen (smoother edges), up to 2x on a Retina screen
+  renderer.setPixelRatio(Math.min(2, Math.max(1.5, window.devicePixelRatio || 1)));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = T.PCFSoftShadowMap;
+  const ANISO = renderer.capabilities.getMaxAnisotropy();
   const scene = new T.Scene();
   const FOV = 30, TAN = Math.tan((FOV / 2) * PI / 180);
   const camera = new T.PerspectiveCamera(FOV, 1, 0.1, 400);
   const hemi = new T.HemisphereLight('#fff6e8', '#8a5a3a', 0.95);
-  const sun = new T.DirectionalLight('#fff1d6', 0.9);
-  sun.position.set(-3, 9, 10);
-  scene.add(hemi, sun);
+  const sun = new T.DirectionalLight('#fff1d6', 0.95);
+  const SUN = new T.Vector3(-3, 9, 10); // from the front left and above, so faces are lit; it follows the camera
+  sun.position.copy(SUN);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 7, bottom: -5, near: 1, far: 40 });
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.03;
+  scene.add(hemi, sun, sun.target);
   Fx.init(scene);
 
   let vw = 0, vh = 0;
   const aspect = () => (window.innerWidth || 800) / (window.innerHeight || 600);
-  // How much hall fits across the screen: less on a narrow (portrait) screen, so the brothers stay big enough.
-  const viewHalfW = () => { const a = aspect(); return a >= 1.6 ? 6.6 : a >= 1.3 ? 5.8 : a >= 1.0 ? 5.0 : 4.2; };
+  // How much hall fits across the screen (half of it, in metres). Close in, so the brothers are big: about 45% of the
+  // screen's height on a wide screen, 40% at 4:3. A narrow (portrait) screen shows less hall.
+  const viewHalfW = () => { const a = aspect(); return a >= 1.6 ? 4.6 : a >= 1.3 ? 4.0 : a >= 1.0 ? 3.6 : 3.2; };
   function resize() {
     const w = window.innerWidth || 800, h = window.innerHeight || 600;
     if (w === vw && h === vh) return;
@@ -52,7 +63,7 @@
 
   // ---------------------------------------------------------------- faces for the menus and the HUD
 
-  const faces = Kit.portraits([Kit.roster.get('teddy'), Kit.roster.get('tommy')], { size: 152 });
+  const faces = Kit.portraits([Kit.roster.get('teddy'), Kit.roster.get('tommy')], { size: 304 }); // sharp on Retina menus
   document.querySelectorAll('.pick').forEach((b) => { b.querySelector('img').src = faces[b.dataset.hero]; });
   $('teamF0').src = faces.teddy; $('teamF1').src = faces.tommy;
 
@@ -88,11 +99,22 @@
 
   // ---------------------------------------------------------------- views
 
-  const SIDE = 0.35;
+  const SIDE = 0.62; // turned this far from side-on toward the camera, so faces show
   const yaw = (screenFace, a) => (screenFace > 0 ? -(PI / 2 + a) : PI / 2 + a);
+
+  // every mesh casts a shadow, and painted shirts stay sharp when seen at an angle
+  function crisp(obj) {
+    obj.traverse((o) => {
+      if (!o.isMesh) return;
+      o.castShadow = true;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (m && m.map && m.map.anisotropy !== ANISO) { m.map.anisotropy = ANISO; m.map.needsUpdate = true; }
+    });
+    return obj;
+  }
 
   function personView(kind, p, scale) {
     const root = new T.Group();
+    crisp(p.root);
     root.add(p.root);
     p.root.scale.setScalar(scale || 1);
     const sh = Models.shadow();
@@ -118,7 +140,7 @@
     if (e.type === 'thrower') return personView('enemy', Models.person(Models.LOOKS.thrower[e.id % 2], ['bag']), 1);
     if (e.type === 'copy') return personView('enemy', Models.person(Models.LOOKS.puff, ['wizard']), BOSS_SCALE.puff);
     const root = new T.Group();
-    const m = e.type === 'imp' ? Models.imp(e.id) : e.type === 'dragon' ? Models.dragon() : Models.confettiBall();
+    const m = crisp(e.type === 'imp' ? Models.imp(e.id) : e.type === 'dragon' ? Models.dragon() : Models.confettiBall());
     root.add(m);
     const sh = Models.shadow();
     sh.scale.setScalar(e.type === 'dragon' ? 0.9 : 0.7);
@@ -157,7 +179,7 @@
     return { kind: 'item', root, sp };
   }
 
-  function potView() { const g = Models.pot(); scene.add(g); return { kind: 'pot', root: g }; }
+  function potView() { const g = crisp(Models.pot()); scene.add(g); return { kind: 'pot', root: g }; }
 
   const zOf = (id) => ((id * 37) % 7) / 7 * 0.6 - 0.3;
 
@@ -197,9 +219,9 @@
         if (e.type === 'boss') Poses.boss(v.p, e, t, dt);
         else Poses.enemy(v.p, e, t, dt);
         v.p.root.position.y = e.y;
-        if (e.state === 'bonked') { v.p.root.rotation.z += dt * 14 * -sf; v.p.root.rotation.y = yaw(sf, 0.2); }
+        if (e.state === 'bonked') { v.p.root.rotation.z += dt * 14 * -sf; v.p.root.rotation.y = yaw(sf, 0.4); }
         else {
-          const want = e.type === 'boss' && e.state === 'act' && e.atk && e.atk.name === 'spin' ? v.p.root.rotation.y + dt * 30 : yaw(sf, 0.28);
+          const want = e.type === 'boss' && e.state === 'act' && e.atk && e.atk.name === 'spin' ? v.p.root.rotation.y + dt * 30 : yaw(sf, 0.5);
           v.p.root.rotation.y = e.type === 'boss' && e.atk && e.atk.name === 'spin' && e.state === 'act' ? want : v.p.root.rotation.y + (want - v.p.root.rotation.y) * Math.min(1, dt * 14);
           v.p.root.rotation.z = 0;
         }
@@ -264,7 +286,7 @@
       Poses.buddy(buddyView.p, B, t, dt);
       buddyView.root.position.set(d * B.u, 0, 0.75);
       buddyView.p.root.position.y = B.y;
-      buddyView.p.root.rotation.y = B.state === 'sig' ? yaw(d * B.face, 1.0) : yaw(d * B.face, 0.3);
+      buddyView.p.root.rotation.y = B.state === 'sig' ? yaw(d * B.face, 1.0) : yaw(d * B.face, 0.55);
       buddyView.shadow.scale.setScalar(buddyView.scale * Math.max(0.3, 1 - B.y * 0.25));
       buddyView.root.visible = true;
       if (B.state === 'fly' && Math.random() < dt * 30) Fx.stars(d * B.u, B.y + 1, 0.8, 1, ['#ffffff', '#8cd8ff']);
@@ -286,7 +308,7 @@
   function syncSmall(v, e, sf, dt, t) {
     const m = v.m;
     m.position.y = e.y;
-    m.rotation.y = yaw(sf, 0.25);
+    m.rotation.y = yaw(sf, 0.45);
     if (e.state === 'bonked') { m.rotation.z += dt * 16 * -sf; return; }
     m.rotation.z = 0;
     if (e.type === 'imp') { const sq = e.y > 0.01 ? 1.12 : 1 - Math.abs(Math.sin(t * 10)) * 0.06; m.scale.set(1 / Math.sqrt(sq), sq, 1 / Math.sqrt(sq)); }
@@ -559,9 +581,14 @@
     camX = cx;
     shake = Math.max(0, shake - dt);
     const sx = shake > 0 ? (Math.random() - 0.5) * shake * 0.6 : 0, sy = shake > 0 ? (Math.random() - 0.5) * shake * 0.4 : 0;
-    const lookY = 1.35 + (a < 1 ? 0.6 : 0);
-    camera.position.set(cx + sx, 2.4 + D * 0.07 + sy, D);
+    // what the camera looks at: the brothers in the middle, or a little higher on screen when the touch buttons
+    // take the bottom, and higher still on a tall portrait screen
+    const lookY = a < 1 ? 2.1 : touchMode ? 1.0 : 1.45;
+    camera.position.set(cx + sx, lookY + 0.9 + D * 0.03 + sy, D);
     camera.lookAt(cx + sx * 0.5, lookY, 0);
+    // the sun (and its shadows) follows the camera along the hall
+    sun.target.position.set(cx, 0, 0);
+    sun.position.set(cx + SUN.x, SUN.y, SUN.z);
   }
 
   // ---------------------------------------------------------------- floors and screens
@@ -594,7 +621,7 @@
     W = null;
     demo = Sim.create({ floor: Math.min(save.floor || 0, save.reached), mode: '2p', noSpawn: true, halfW: viewHalfW() });
     demo.final = false;
-    hall = Scene.build(scene, demo);
+    hall = Scene.build(scene, demo, { aniso: ANISO });
     demo.views = ['teddy', 'tommy'].map((id, i) => {
       const P = { id };
       const v = playerView(P);
@@ -670,7 +697,7 @@
     Input.clear();
     W = Sim.create({ floor: fi, difficulty: save.diff, mode, hero: save.hero, seed: seed || ((Math.random() * 1e9) | 0), halfW: viewHalfW(), score: carry.score || 0, lives: carry.lives });
     floorScore = W.score;
-    hall = Scene.build(scene, W);
+    hall = Scene.build(scene, W, { aniso: ANISO });
     lag[0] = lag[1] = 1; bossLag.v = 1;
     // the HUD for this set-up
     const p0 = W.players[0];

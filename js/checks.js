@@ -17,7 +17,7 @@
 
   // Play one floor with the autopilot. Returns { ok, why, t, ... }.
   function runFloor(cfg) {
-    const W = Sim.create({ floor: cfg.floor, difficulty: cfg.diff, mode: cfg.mode, hero: cfg.hero, seed: cfg.seed || 1, halfW: cfg.halfW, lives: cfg.lives });
+    const W = Sim.create({ floor: cfg.floor, difficulty: cfg.diff, mode: cfg.mode, hero: cfg.hero, seed: cfg.seed || 1, halfW: cfg.halfW || 4.6, lives: cfg.lives });
     if (cfg.tamper) cfg.tamper(W);
     const mems = W.players.map(() => ({ opts: { call: cfg.call, callAlways: cfg.call, idle: cfg.idle, callEvery: 10 } }));
     const problems = [];
@@ -54,9 +54,10 @@
   function floorsCheck(o) {
     o = o || {};
     const out = [];
+    // the game's view is 4.6 m either side on a wide screen, 4.0 on an iPad, 3.2 on a portrait phone
     const setups = [
-      { mode: '1p', hero: 'teddy' }, { mode: '1p', hero: 'tommy' }, { mode: '2p' },
-      { mode: '1p', hero: 'tommy', call: true },
+      { mode: '1p', hero: 'teddy' }, { mode: '1p', hero: 'tommy', halfW: 4.0 }, { mode: '2p', halfW: 4.0 },
+      { mode: '1p', hero: 'tommy', call: true }, { mode: '1p', hero: 'teddy', halfW: 3.2 },
     ];
     const seeds = o.seeds || [1, 2];
     for (const diff of ['easy', 'normal']) {
@@ -65,7 +66,7 @@
         if (!floors.includes(f)) continue;
         for (const s of setups) for (const seed of seeds) {
           const r = runFloor(Object.assign({ floor: f, diff, seed, idle: o.idle, sabotage: o.sabotage }, s));
-          out.push(Object.assign({ name: `${diff} floor ${f + 1} ${s.mode}${s.hero ? ' ' + s.hero : ''}${s.call ? ' +buddy' : ''} seed ${seed}` }, r));
+          out.push(Object.assign({ name: `${diff} floor ${f + 1} ${s.mode}${s.hero ? ' ' + s.hero : ''}${s.call ? ' +buddy' : ''} view ${s.halfW || 4.6} seed ${seed}` }, r));
         }
       }
     }
@@ -74,7 +75,7 @@
 
   // ---- a quiet room with nobody walking in, for the scripted checks
   function room(o) {
-    const W = Sim.create(Object.assign({ floor: 0, difficulty: 'easy', noSpawn: true, seed: 3 }, o));
+    const W = Sim.create(Object.assign({ floor: 0, difficulty: 'easy', noSpawn: true, seed: 3, halfW: 4.6 }, o));
     W.pots = []; W.items = [];
     while (W.phase === 'intro') Sim.step(W, []);
     return W;
@@ -122,7 +123,7 @@
           if (idle && o.quick) continue;
           for (const mode of ['1p', '2p']) {
             if (idle && mode === '2p') continue;
-            const W = Sim.create({ floor: f, difficulty: diff, mode, hero: f % 2 ? 'tommy' : 'teddy', seed: 7 + f, lives: idle ? 1 : 9 });
+            const W = Sim.create({ floor: f, difficulty: diff, mode, hero: f % 2 ? 'tommy' : 'teddy', seed: 7 + f, lives: idle ? 1 : 9, halfW: mode === '2p' ? 3.2 : 4.0 });
             while (W.phase === 'intro') Sim.step(W, []);
             Sim.enterArena(W);
             const mems = W.players.map(() => ({ opts: { idle } }));
@@ -284,7 +285,7 @@
 
   // the magician's copies must never pop up on a brother either
   function copiesCheck() {
-    const W = Sim.create({ floor: 3, difficulty: 'normal', seed: 11, lives: 9 });
+    const W = Sim.create({ floor: 3, difficulty: 'normal', seed: 11, lives: 9, halfW: 4.0 });
     while (W.phase === 'intro') Sim.step(W, []);
     Sim.enterArena(W);
     let closest = Infinity, copies = 0;

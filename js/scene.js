@@ -65,7 +65,8 @@
   }
 
   // Build one floor's hall. Returns { group, update(dt, t), panda, cage }.
-  function build(scene, W) {
+  function build(scene, W, o) {
+    const aniso = (o && o.aniso) || 1;
     const F = W.F, d = W.dir, L = W.L;
     const group = new T.Group();
     scene.add(group);
@@ -78,8 +79,10 @@
     // floor
     const ft = floorTexture(F);
     ft.repeat.set(len / 4, 4.5);
+    ft.anisotropy = aniso; // the planks stay sharp toward the back
     const floor = new T.Mesh(new T.BoxGeometry(len, 0.3, 14), mat('#ffffff', { map: ft, roughness: 0.8 }));
     floor.position.set(x(mid), -0.15, 3.8);
+    floor.receiveShadow = true;
     group.add(floor);
     // a dark board across the front, and a red carpet runner down the middle of the lane
     const edge = new T.Mesh(new T.BoxGeometry(len, 0.02, 0.18), mat(G().shade(F.floor, -0.45)));
@@ -87,6 +90,7 @@
     group.add(edge);
     const runner = new T.Mesh(new T.BoxGeometry(len, 0.02, 1.7), mat(G().shade(F.pillar, -0.1), { roughness: 0.95 }));
     runner.position.set(x(mid), 0.004, 0.0);
+    runner.receiveShadow = true;
     group.add(runner);
     for (const z of [-0.85, 0.85]) {
       const s = new T.Mesh(new T.BoxGeometry(len, 0.022, 0.08), mat('#e8b84a'));
@@ -97,6 +101,7 @@
     // back wall, bay by bay
     const wt = wallTexture(F);
     wt.repeat.set(len / BAY, 1);
+    wt.anisotropy = aniso;
     const wall = new T.Mesh(new T.PlaneGeometry(len, 10), mat('#ffffff', { map: wt, roughness: 0.95 }));
     wall.position.set(x(mid), 5, -3.1);
     group.add(wall);
